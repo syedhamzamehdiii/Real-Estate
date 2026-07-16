@@ -1,0 +1,34 @@
+.river-track {
+  position: fixed;
+  left: 18px;
+  top: 0;
+  height: 100vh;
+  width: 3px;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.river-track svg {
+  height: 100%;
+  width: 100%;
+}
+
+.river-path-bg {
+  stroke: var(--slate-600);
+  stroke-width: 2;
+  fill: none;
+  opacity: 0.35;
+}
+
+.river-path-fg {
+  stroke: url(#goldGrad);
+  stroke-width: 2.5;
+  fill: none;
+  filter: drop-shadow(0 0 4px rgba(201, 162, 39, 0.7));
+}
+
+@media (max-width: 780px) {
+  .river-track {
+    display: none;
+  }
+}

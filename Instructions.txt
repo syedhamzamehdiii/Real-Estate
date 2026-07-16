@@ -1,0 +1,4 @@
+We have to make a react frontend with a firebase backend that is someones else task:
+What i want from you is to make a proper folder structure and follow it.
+Memorize it and dont fuck anything.
+The most important thing is the website should be mobile responsive, work on all mobiles perfectly,beautifully and all modules should work properly.
