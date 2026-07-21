@@ -11,7 +11,10 @@
     "baseUrl": ".",
     "paths": {
       "@estate-line/backend": ["../Backend/src/index.ts"],
-      "@estate-line/backend/client": ["../Backend/src/client/index.ts"]
+      "@estate-line/backend/client": ["../Backend/src/client/index.ts"],
+      "firebase": ["./node_modules/firebase"],
+      "firebase/*": ["./node_modules/firebase/*"],
+      "zod": ["./node_modules/zod"]
     },
 
     /* Bundler mode */
