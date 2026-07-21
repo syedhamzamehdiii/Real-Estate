@@ -22,7 +22,7 @@ import type {
   ResourceWriteOptions,
 } from '../types/models'
 import { DEFAULT_PAGE_SIZE } from '../types/models'
-import { validateResourceInput } from '../validation/resource'
+import { validateResourceDraft, validateResourceInput } from '../validation/resource'
 import { ensureUniqueSlug, finalizeSlug } from '../utils/ids'
 import { stripUndefined } from '../utils/firestore'
 import {
@@ -146,9 +146,11 @@ export async function createResource(
     finalizeSlug(input.slug, input.title),
     existing.map((p) => p.slug),
   )
-  const parsed = validateResourceInput({ ...input, id, slug })
+  const draft = validateResourceDraft({ ...input, id, slug })
 
-  const image = await persistResourceImage(id, parsed.image)
+  const image = await persistResourceImage(id, draft.image)
+  const parsed = validateResourceInput({ ...draft, id, slug, image })
+
   const featuredOrder = await placeResourceFeatured(
     id,
     Boolean(parsed.featured),
@@ -160,7 +162,6 @@ export async function createResource(
     ...parsed,
     id,
     slug,
-    image,
     featured,
     ownerId: uid,
     createdBy: uid,
@@ -187,8 +188,9 @@ export async function updateResource(
     finalizeSlug(input.slug, input.title),
     others.map((p) => p.slug),
   )
-  const parsed = validateResourceInput({ ...input, id, slug })
-  const image = await persistResourceImage(id, parsed.image)
+  const draft = validateResourceDraft({ ...input, id, slug })
+  const image = await persistResourceImage(id, draft.image)
+  const parsed = validateResourceInput({ ...draft, id, slug, image })
 
   const featuredOrder = await placeResourceFeatured(
     id,
@@ -202,7 +204,6 @@ export async function updateResource(
     ...parsed,
     id,
     slug,
-    image,
     featured,
     ownerId: prev.ownerId ?? uid,
     createdBy: prev.createdBy ?? uid,

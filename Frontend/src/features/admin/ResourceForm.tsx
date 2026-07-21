@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui'
 import { useResources } from '../../context/ResourcesContext'
 import { fileToDataUrl } from '../../lib/imageUpload'
+import { mapSaveError, scrollToFirstError } from '../../lib/formErrors'
 import { finalizeSlug, sanitizeSlugInput, slugifyResource } from '../../lib/resourcesStorage'
 import type { BlogPost } from '../../types'
 import './Admin.css'
@@ -73,7 +74,41 @@ function buildPayload(form: FormState): Omit<BlogPost, 'id'> {
   }
 }
 
-type Errors = Partial<Record<keyof FormState | 'upload', string>>
+type Errors = Partial<Record<keyof FormState | 'form' | 'upload', string>>
+
+const RESOURCE_FIELD_IDS: Record<string, string> = {
+  form: 'form-error',
+  title: 'title',
+  slug: 'slug',
+  category: 'category',
+  author: 'author',
+  readMinutes: 'readMinutes',
+  publishedAt: 'publishedAt',
+  image: 'field-image',
+  upload: 'field-image',
+  excerpt: 'excerpt',
+  content: 'content',
+  replaceFeaturedId: 'replaceFeatured',
+}
+
+const RESOURCE_ERROR_ORDER = [
+  'title',
+  'slug',
+  'category',
+  'author',
+  'readMinutes',
+  'publishedAt',
+  'image',
+  'upload',
+  'excerpt',
+  'content',
+  'replaceFeaturedId',
+  'form',
+]
+
+function scrollToResourceErrors(errors: Errors) {
+  scrollToFirstError(errors, RESOURCE_FIELD_IDS, RESOURCE_ERROR_ORDER)
+}
 
 function validate(
   form: FormState,
@@ -185,10 +220,13 @@ function ResourceEditor({
       const dataUrl = await fileToDataUrl(file)
       setForm((prev) => ({ ...prev, image: dataUrl }))
     } catch (err) {
-      setErrors((prev) => ({
-        ...prev,
-        upload: err instanceof Error ? err.message : 'Could not upload cover photo',
-      }))
+      const mapped = mapSaveError(err)
+      const next: Errors = {
+        image: mapped.image ?? (err instanceof Error ? err.message : 'Could not upload cover photo'),
+        upload: mapped.upload,
+      }
+      setErrors((prev) => ({ ...prev, ...next }))
+      scrollToResourceErrors(next)
     } finally {
       setUploading(false)
     }
@@ -200,7 +238,10 @@ function ResourceEditor({
     e.preventDefault()
     const nextErrors = validate(form, { needsFeaturedReplace })
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length) return
+    if (Object.keys(nextErrors).length) {
+      scrollToResourceErrors(nextErrors)
+      return
+    }
 
     const payload = buildPayload(form)
     const writeOptions = {
@@ -220,8 +261,11 @@ function ResourceEditor({
         navigate('/admin/resources', { state: { notice: 'Resource created' } })
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save resource'
-      setErrors((prev) => ({ ...prev, title: message }))
+      const mapped = mapSaveError(err)
+      const next: Errors = { ...mapped }
+      if (!Object.keys(next).length) next.form = 'Could not save resource'
+      setErrors(next)
+      scrollToResourceErrors(next)
     } finally {
       setSaving(false)
     }
@@ -243,6 +287,11 @@ function ResourceEditor({
       </header>
 
       <form className="admin-form" onSubmit={onSubmit} noValidate>
+        {errors.form ? (
+          <p id="form-error" className="field-error admin-form-banner" role="alert" tabIndex={-1}>
+            {errors.form}
+          </p>
+        ) : null}
         <section className="admin-panel">
           <h2>Basics</h2>
           <div className="admin-fields">
@@ -324,7 +373,7 @@ function ResourceEditor({
           </div>
         </section>
 
-        <section className="admin-panel">
+        <section className="admin-panel" id="field-image" tabIndex={-1}>
           <h2>Cover photo</h2>
           <p className="admin-hint">Upload from your device. Shown on cards and the article hero.</p>
 

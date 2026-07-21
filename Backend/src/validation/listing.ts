@@ -21,28 +21,60 @@ const listingDetailsSchema = z
   })
   .strict()
 
-export const listingInputSchema = z
+/** Admin form may send a data URL; upload to Storage before final validation. */
+const imageSourceSchema = z.string().trim().min(1).max(15_000_000)
+
+/** Persisted cover/gallery must be a short HTTP(S) URL (Storage download URL). */
+const imageUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2048)
+  .refine((value) => /^https?:\/\//i.test(value), {
+    message: 'Image must be an HTTP(S) URL after upload',
+  })
+
+const listingFieldsBase = {
+  id: z.string().min(1).max(80).optional(),
+  title: z.string().trim().min(1).max(200),
+  location: z.string().trim().min(1).max(200),
+  locationKey: z.string().trim().min(1).max(80),
+  type: z.enum(PROPERTY_TYPES),
+  status: z.enum(PROPERTY_STATUSES),
+  priceLabel: z.string().trim().min(1).max(80),
+  priceValue: z.number().nonnegative(),
+  beds: z.number().int().nonnegative().optional(),
+  baths: z.number().int().nonnegative().optional(),
+  sizeLabel: z.string().trim().min(1).max(80),
+  description: z.string().trim().min(1).max(10000),
+  featured: z.boolean().optional(),
+  details: listingDetailsSchema.optional(),
+}
+
+/** Pre-upload validation (data URLs allowed). */
+export const listingDraftSchema = z
   .object({
-    id: z.string().min(1).max(80).optional(),
-    title: z.string().trim().min(1).max(200),
-    location: z.string().trim().min(1).max(200),
-    locationKey: z.string().trim().min(1).max(80),
-    type: z.enum(PROPERTY_TYPES),
-    status: z.enum(PROPERTY_STATUSES),
-    priceLabel: z.string().trim().min(1).max(80),
-    priceValue: z.number().nonnegative(),
-    image: z.string().trim().min(1).max(2048),
-    images: z.array(z.string().min(1).max(2048)).max(MAX_GALLERY_IMAGES).optional(),
-    beds: z.number().int().nonnegative().optional(),
-    baths: z.number().int().nonnegative().optional(),
-    sizeLabel: z.string().trim().min(1).max(80),
-    description: z.string().trim().min(1).max(10000),
-    featured: z.boolean().optional(),
-    details: listingDetailsSchema.optional(),
+    ...listingFieldsBase,
+    image: imageSourceSchema,
+    images: z.array(imageSourceSchema).max(MAX_GALLERY_IMAGES).optional(),
   })
   .strict()
 
+/** Post-upload validation (Storage / HTTPS URLs only). */
+export const listingInputSchema = z
+  .object({
+    ...listingFieldsBase,
+    image: imageUrlSchema,
+    images: z.array(imageUrlSchema).max(MAX_GALLERY_IMAGES).optional(),
+  })
+  .strict()
+
+export type ListingDraft = z.infer<typeof listingDraftSchema>
 export type ListingInput = z.infer<typeof listingInputSchema>
+
+export function validateListingDraft(input: unknown): ListingDraft {
+  return listingDraftSchema.parse(input)
+}
 
 export function validateListingInput(input: unknown): ListingInput {
   return listingInputSchema.parse(input)

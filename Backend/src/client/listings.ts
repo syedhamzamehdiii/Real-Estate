@@ -24,7 +24,7 @@ import type {
   PaginatedResult,
 } from '../types/models'
 import { DEFAULT_PAGE_SIZE } from '../types/models'
-import { validateListingInput } from '../validation/listing'
+import { validateListingDraft, validateListingInput } from '../validation/listing'
 import { ensureUniqueId, slugifyId } from '../utils/ids'
 import { stripUndefined } from '../utils/firestore'
 import { getCurrentUser } from './auth'
@@ -149,9 +149,9 @@ export async function createListing(
   options?: ListingWriteOptions,
 ): Promise<Listing> {
   const uid = requireUid()
-  const parsed = validateListingInput(input)
+  const draft = validateListingDraft(input)
   const existing = await listAllListings()
-  const desired = parsed.id?.trim() || slugifyId(parsed.title)
+  const desired = draft.id?.trim() || slugifyId(draft.title)
   const id = ensureUniqueId(
     desired,
     existing.map((l) => l.id),
@@ -159,9 +159,16 @@ export async function createListing(
 
   const imagesPersisted = await persistListingImages(
     id,
-    parsed.image,
-    parsed.images ?? [],
+    draft.image,
+    draft.images ?? [],
   )
+
+  const parsed = validateListingInput({
+    ...draft,
+    id,
+    image: imagesPersisted.image,
+    images: imagesPersisted.images.length ? imagesPersisted.images : undefined,
+  })
 
   const featuredOrder = await placeListingFeatured(
     id,
@@ -177,8 +184,6 @@ export async function createListing(
   const docData = stripUndefined({
     ...parsed,
     id,
-    image: imagesPersisted.image,
-    images: imagesPersisted.images.length ? imagesPersisted.images : undefined,
     featured,
     ownerId: uid,
     createdBy: uid,
@@ -197,15 +202,22 @@ export async function updateListing(
   options?: ListingWriteOptions,
 ): Promise<Listing> {
   const uid = requireUid()
-  const parsed = validateListingInput({ ...input, id })
+  const draft = validateListingDraft({ ...input, id })
   const existingSnap = await getDoc(doc(getDb(), COLLECTIONS.listings, id))
   if (!existingSnap.exists()) throw new Error(`Listing "${id}" not found.`)
 
   const imagesPersisted = await persistListingImages(
     id,
-    parsed.image,
-    parsed.images ?? [],
+    draft.image,
+    draft.images ?? [],
   )
+
+  const parsed = validateListingInput({
+    ...draft,
+    id,
+    image: imagesPersisted.image,
+    images: imagesPersisted.images.length ? imagesPersisted.images : undefined,
+  })
 
   const featuredOrder = await placeListingFeatured(
     id,
@@ -222,8 +234,6 @@ export async function updateListing(
   const docData = stripUndefined({
     ...parsed,
     id,
-    image: imagesPersisted.image,
-    images: imagesPersisted.images.length ? imagesPersisted.images : undefined,
     featured,
     ownerId: prev.ownerId ?? uid,
     createdBy: prev.createdBy ?? uid,

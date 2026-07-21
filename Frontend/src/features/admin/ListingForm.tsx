@@ -4,6 +4,7 @@ import { Button } from '../../components/ui'
 import { useListings } from '../../context/ListingsContext'
 import { PROPERTY_TYPES } from '../../data/site'
 import { fileToDataUrl, filesToDataUrls } from '../../lib/imageUpload'
+import { mapSaveError, scrollToFirstError } from '../../lib/formErrors'
 import { slugifyId } from '../../lib/listingsStorage'
 import type { Listing, ListingDetails, PropertyStatus, PropertyType } from '../../types'
 import './Admin.css'
@@ -189,6 +190,42 @@ function buildListingPayload(form: FormState, locationKey: string): Omit<Listing
 
 type Errors = Partial<Record<keyof FormState | 'form' | 'upload', string>>
 
+const LISTING_FIELD_IDS: Record<string, string> = {
+  form: 'form-error',
+  title: 'title',
+  locationKey: 'mainArea',
+  location: 'location',
+  newMainArea: 'newMainArea',
+  priceLabel: 'priceLabel',
+  priceValue: 'priceValue',
+  image: 'field-image',
+  gallery: 'field-gallery',
+  upload: 'field-image',
+  sizeLabel: 'sizeLabel',
+  description: 'description',
+  replaceFeaturedId: 'replaceFeatured',
+}
+
+const LISTING_ERROR_ORDER = [
+  'title',
+  'locationKey',
+  'newMainArea',
+  'location',
+  'priceLabel',
+  'priceValue',
+  'image',
+  'upload',
+  'gallery',
+  'sizeLabel',
+  'description',
+  'replaceFeaturedId',
+  'form',
+]
+
+function scrollToListingErrors(errors: Errors) {
+  scrollToFirstError(errors, LISTING_FIELD_IDS, LISTING_ERROR_ORDER)
+}
+
 function validate(
   form: FormState,
   opts: { needsFeaturedReplace: boolean },
@@ -296,10 +333,13 @@ function ListingEditor({
       const dataUrl = await fileToDataUrl(file)
       setForm((prev) => ({ ...prev, image: dataUrl }))
     } catch (err) {
-      setErrors((prev) => ({
-        ...prev,
-        upload: err instanceof Error ? err.message : 'Could not upload cover photo',
-      }))
+      const mapped = mapSaveError(err)
+      const next: Errors = {
+        image: mapped.image ?? (err instanceof Error ? err.message : 'Could not upload cover photo'),
+        upload: mapped.upload,
+      }
+      setErrors((prev) => ({ ...prev, ...next }))
+      scrollToListingErrors(next)
     } finally {
       setUploading(null)
     }
@@ -315,10 +355,15 @@ function ListingEditor({
       const urls = await filesToDataUrls(files)
       setForm((prev) => ({ ...prev, gallery: [...prev.gallery, ...urls] }))
     } catch (err) {
-      setErrors((prev) => ({
-        ...prev,
-        upload: err instanceof Error ? err.message : 'Could not upload photos',
-      }))
+      const mapped = mapSaveError(err)
+      const next: Errors = {
+        upload:
+          mapped.upload ??
+          mapped.image ??
+          (err instanceof Error ? err.message : 'Could not upload photos'),
+      }
+      setErrors((prev) => ({ ...prev, ...next }))
+      scrollToListingErrors(next)
     } finally {
       setUploading(null)
     }
@@ -339,7 +384,10 @@ function ListingEditor({
     e.preventDefault()
     const nextErrors = validate(form, { needsFeaturedReplace })
     setErrors(nextErrors)
-    if (Object.keys(nextErrors).length) return
+    if (Object.keys(nextErrors).length) {
+      scrollToListingErrors(nextErrors)
+      return
+    }
 
     const resolved = resolveMainArea(form)
     const mainAreaLabel =
@@ -367,8 +415,11 @@ function ListingEditor({
         navigate('/admin', { state: { notice: 'Listing created' } })
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save listing'
-      setErrors((prev) => ({ ...prev, title: message }))
+      const mapped = mapSaveError(err)
+      const next: Errors = { ...mapped }
+      if (!Object.keys(next).length) next.form = 'Could not save listing'
+      setErrors(next)
+      scrollToListingErrors(next)
     } finally {
       setSaving(false)
     }
@@ -391,6 +442,11 @@ function ListingEditor({
       </header>
 
       <form className="admin-form" onSubmit={onSubmit} noValidate>
+        {errors.form ? (
+          <p id="form-error" className="field-error admin-form-banner" role="alert" tabIndex={-1}>
+            {errors.form}
+          </p>
+        ) : null}
         <section className="admin-panel">
           <h2>Basics</h2>
           <div className="admin-fields">
@@ -518,7 +574,7 @@ function ListingEditor({
             Upload from your device. Cover is required; additional photos are optional.
           </p>
 
-          <div className="admin-upload-block">
+          <div className="admin-upload-block" id="field-image" tabIndex={-1}>
             <div className="admin-upload-label-row">
               <span className="admin-upload-label">Cover image</span>
               {form.image ? (
@@ -563,7 +619,7 @@ function ListingEditor({
             <FieldError message={errors.image} />
           </div>
 
-          <div className="admin-upload-block">
+          <div className="admin-upload-block" id="field-gallery" tabIndex={-1}>
             <div className="admin-upload-label-row">
               <span className="admin-upload-label">Additional images</span>
               <span className="admin-upload-meta">
