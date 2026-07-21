@@ -25,7 +25,7 @@ export function AdminDashboard() {
 
   const handleDelete = (id: string, title: string) => {
     if (window.confirm(`Remove “${title}” from the site?`)) {
-      removeListing(id)
+      void removeListing(id)
     }
   }
 
@@ -35,7 +35,7 @@ export function AdminDashboard() {
         'Reset all listings to the built-in samples? Added and edited listings will be cleared.',
       )
     ) {
-      resetToSeed()
+      void resetToSeed()
     }
   }
 

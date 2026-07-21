@@ -1,0 +1,35 @@
+{
+  "name": "@estate-line/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Firebase backend for Estate Line Properties — Firestore, Storage, Auth, and seed tooling",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types/models.ts",
+    "./client": "./src/client/index.ts"
+  },
+  "scripts": {
+    "seed": "tsx scripts/seed.ts",
+    "create-admin": "tsx scripts/create-admin.ts",
+    "deploy:rules": "npx --yes firebase-tools deploy --only firestore:rules,storage",
+    "deploy:indexes": "npx --yes firebase-tools deploy --only firestore:indexes",
+    "deploy": "npx --yes firebase-tools deploy --only firestore,storage",
+    "emulators": "npx --yes firebase-tools emulators:start --only auth,firestore,storage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "firebase": "^11.10.0",
+    "firebase-admin": "^13.4.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "tsx": "^4.20.3",
+    "typescript": "~5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

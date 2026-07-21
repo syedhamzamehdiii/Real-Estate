@@ -21,7 +21,7 @@ export function AdminResourcesDashboard() {
 
   const handleDelete = (id: string, title: string) => {
     if (window.confirm(`Remove “${title}” from Resources?`)) {
-      removePost(id)
+      void removePost(id)
     }
   }
 
@@ -31,7 +31,7 @@ export function AdminResourcesDashboard() {
         'Reset all resources to the built-in samples? Added and edited articles will be cleared.',
       )
     ) {
-      resetToSeed()
+      void resetToSeed()
     }
   }
 

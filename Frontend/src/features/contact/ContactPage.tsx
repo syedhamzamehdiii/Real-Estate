@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Button, Reveal, SectionHead } from '../../components/ui'
 import { SITE } from '../../data/site'
 import type { ContactFormData } from '../../types'
+import { firebaseReady } from '../../firebase/config'
+import { createInquiry } from '@estate-line/backend/client'
 import './ContactPage.css'
 
 const empty: ContactFormData = {
@@ -41,12 +43,21 @@ export function ContactPage() {
     return Object.keys(next).length === 0
   }
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!validate()) return
-    // Ready for Firebase: replace with addDoc(...) when backend is wired
-    setSubmitted(true)
-    setForm(empty)
+    try {
+      if (firebaseReady) {
+        await createInquiry(form)
+      }
+      setSubmitted(true)
+      setForm(empty)
+    } catch {
+      setErrors((prev) => ({
+        ...prev,
+        message: 'Could not send your message. Please try again or call us.',
+      }))
+    }
   }
 
   return (

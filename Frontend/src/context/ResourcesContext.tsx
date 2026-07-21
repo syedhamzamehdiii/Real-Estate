@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -22,6 +23,17 @@ import {
   saveResourcesStore,
   type ResourcesStoreState,
 } from '../lib/resourcesStorage'
+import { firebaseReady } from '../firebase/config'
+import {
+  createResource as fbCreateResource,
+  updateResource as fbUpdateResource,
+  deleteResource as fbDeleteResource,
+  subscribeResources,
+  subscribeResourcesMeta,
+  collectCategories as fbCollectCategories,
+  type ResourcesMeta,
+} from '@estate-line/backend/client'
+import { resolveFeaturedItems } from '@estate-line/backend'
 
 type ResourceWriteOptions = {
   replaceFeaturedId?: string
@@ -31,15 +43,16 @@ type ResourcesContextValue = {
   posts: BlogPost[]
   featuredPosts: BlogPost[]
   categories: string[]
+  ready: boolean
   getById: (id: string) => BlogPost | undefined
   getBySlug: (slug: string) => BlogPost | undefined
   addPost: (
     input: Omit<BlogPost, 'id'> & { id?: string },
     options?: ResourceWriteOptions,
-  ) => BlogPost
-  updatePost: (id: string, post: BlogPost, options?: ResourceWriteOptions) => void
-  removePost: (id: string) => void
-  resetToSeed: () => void
+  ) => Promise<BlogPost>
+  updatePost: (id: string, post: BlogPost, options?: ResourceWriteOptions) => Promise<void>
+  removePost: (id: string) => Promise<void>
+  resetToSeed: () => Promise<void>
 }
 
 const ResourcesContext = createContext<ResourcesContextValue | null>(null)
@@ -72,7 +85,7 @@ function commitPost(
   return next
 }
 
-export function ResourcesProvider({ children }: { children: ReactNode }) {
+function LocalResourcesProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<ResourcesStoreState>(() => loadResourcesStore())
 
   const persist = useCallback((next: ResourcesStoreState) => {
@@ -100,7 +113,7 @@ export function ResourcesProvider({ children }: { children: ReactNode }) {
   )
 
   const addPost = useCallback(
-    (input: Omit<BlogPost, 'id'> & { id?: string }, options?: ResourceWriteOptions) => {
+    async (input: Omit<BlogPost, 'id'> & { id?: string }, options?: ResourceWriteOptions) => {
       const id = input.id?.trim() || nextResourceId(posts.map((p) => p.id))
       const slug = ensureUniqueSlug(
         finalizeSlug(input.slug, input.title),
@@ -119,7 +132,7 @@ export function ResourcesProvider({ children }: { children: ReactNode }) {
   )
 
   const updatePost = useCallback(
-    (id: string, post: BlogPost, options?: ResourceWriteOptions) => {
+    async (id: string, post: BlogPost, options?: ResourceWriteOptions) => {
       const others = posts.filter((p) => p.id !== id)
       const slug = ensureUniqueSlug(
         finalizeSlug(post.slug, post.title),
@@ -131,7 +144,7 @@ export function ResourcesProvider({ children }: { children: ReactNode }) {
   )
 
   const removePost = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const withoutFeatured = removeFromFeaturedOrder(store, id)
       persist({
         ...withoutFeatured,
@@ -147,7 +160,7 @@ export function ResourcesProvider({ children }: { children: ReactNode }) {
     [persist, store],
   )
 
-  const resetToSeed = useCallback(() => {
+  const resetToSeed = useCallback(async () => {
     persist({
       added: [],
       updated: {},
@@ -161,6 +174,7 @@ export function ResourcesProvider({ children }: { children: ReactNode }) {
       posts,
       featuredPosts,
       categories,
+      ready: true,
       getById,
       getBySlug,
       addPost,
@@ -184,6 +198,131 @@ export function ResourcesProvider({ children }: { children: ReactNode }) {
   return (
     <ResourcesContext.Provider value={value}>{children}</ResourcesContext.Provider>
   )
+}
+
+function FirebaseResourcesProvider({ children }: { children: ReactNode }) {
+  const [posts, setPosts] = useState<BlogPost[]>([])
+  const [meta, setMeta] = useState<ResourcesMeta>({
+    featuredOrder: [],
+    nextNumericId: 1,
+  })
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    let postsReady = false
+    let metaReady = false
+    const mark = () => {
+      if (postsReady && metaReady) setReady(true)
+    }
+
+    const unsubPosts = subscribeResources(
+      (items) => {
+        setPosts(items)
+        postsReady = true
+        mark()
+      },
+      (err) => {
+        console.error('Resources subscription failed', err)
+        postsReady = true
+        mark()
+      },
+    )
+    const unsubMeta = subscribeResourcesMeta(
+      (next) => {
+        setMeta(next)
+        metaReady = true
+        mark()
+      },
+      (err) => {
+        console.error('Resources meta subscription failed', err)
+        metaReady = true
+        mark()
+      },
+    )
+    return () => {
+      unsubPosts()
+      unsubMeta()
+    }
+  }, [])
+
+  const featuredPosts = useMemo(
+    () => resolveFeaturedItems(posts, meta.featuredOrder, FEATURED_RESOURCE_LIMIT),
+    [posts, meta.featuredOrder],
+  )
+
+  const categories = useMemo(() => fbCollectCategories(posts), [posts])
+
+  const getById = useCallback(
+    (id: string) => posts.find((p) => p.id === id),
+    [posts],
+  )
+
+  const getBySlug = useCallback(
+    (slug: string) => posts.find((p) => p.slug === slug),
+    [posts],
+  )
+
+  const addPost = useCallback(
+    async (input: Omit<BlogPost, 'id'> & { id?: string }, options?: ResourceWriteOptions) => {
+      return fbCreateResource(input, options)
+    },
+    [],
+  )
+
+  const updatePost = useCallback(
+    async (id: string, post: BlogPost, options?: ResourceWriteOptions) => {
+      await fbUpdateResource(id, post, options)
+    },
+    [],
+  )
+
+  const removePost = useCallback(async (id: string) => {
+    await fbDeleteResource(id)
+  }, [])
+
+  const resetToSeed = useCallback(async () => {
+    console.warn(
+      'resetToSeed is a local-only helper. Re-run `npm run seed` in Backend to restore Firestore data.',
+    )
+  }, [])
+
+  const value = useMemo(
+    () => ({
+      posts,
+      featuredPosts,
+      categories,
+      ready,
+      getById,
+      getBySlug,
+      addPost,
+      updatePost,
+      removePost,
+      resetToSeed,
+    }),
+    [
+      posts,
+      featuredPosts,
+      categories,
+      ready,
+      getById,
+      getBySlug,
+      addPost,
+      updatePost,
+      removePost,
+      resetToSeed,
+    ],
+  )
+
+  return (
+    <ResourcesContext.Provider value={value}>{children}</ResourcesContext.Provider>
+  )
+}
+
+export function ResourcesProvider({ children }: { children: ReactNode }) {
+  if (firebaseReady) {
+    return <FirebaseResourcesProvider>{children}</FirebaseResourcesProvider>
+  }
+  return <LocalResourcesProvider>{children}</LocalResourcesProvider>
 }
 
 export function useResources() {

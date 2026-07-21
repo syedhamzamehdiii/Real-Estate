@@ -1,4 +1,9 @@
-We have to make a react frontend with a firebase backend that is someones else task:
-What i want from you is to make a proper folder structure and follow it.
-Memorize it and dont fuck anything.
-The most important thing is the website should be mobile responsive, work on all mobiles perfectly,beautifully and all modules should work properly.
+VITE_ADMIN_EMAIL=admin@estatelineproperties.com
+VITE_ADMIN_PASSWORD=EstateLine@2026
+
+VITE_FIREBASE_API_KEY=AIzaSyA5mWALjxL0VaGrdQ--K5VwA-PXgKGf2xQ
+VITE_FIREBASE_AUTH_DOMAIN=real-estate-project-d4cbe.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=real-estate-project-d4cbe
+VITE_FIREBASE_STORAGE_BUCKET=real-estate-project-d4cbe.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=761912669872
+VITE_FIREBASE_APP_ID=1:761912669872:web:532af5701e52779afb6d75

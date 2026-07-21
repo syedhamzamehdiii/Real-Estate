@@ -2,17 +2,21 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
+import { firebaseReady } from '../firebase/config'
 import {
   getSession,
   isAuthenticated,
   loginWithEmailPassword,
   logout as clearSession,
+  sessionFromFirebaseUser,
   type AdminSession,
 } from '../lib/adminAuth'
+import { subscribeAuth } from '@estate-line/backend/client'
 
 type AuthContextValue = {
   user: AdminSession | null
@@ -24,8 +28,26 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AdminSession | null>(() => getSession())
-  const [ready] = useState(true)
+  const [user, setUser] = useState<AdminSession | null>(() =>
+    firebaseReady ? null : getSession(),
+  )
+  const [ready, setReady] = useState(!firebaseReady)
+
+  useEffect(() => {
+    if (!firebaseReady) return
+
+    const unsub = subscribeAuth(async (fbUser) => {
+      if (!fbUser) {
+        setUser(null)
+        setReady(true)
+        return
+      }
+      const session = await sessionFromFirebaseUser()
+      setUser(session)
+      setReady(true)
+    })
+    return unsub
+  }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     const session = await loginWithEmailPassword(email, password)
@@ -33,13 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
-    clearSession()
-    setUser(null)
+    void clearSession().then(() => setUser(null))
   }, [])
 
   const value = useMemo(
     () => ({
-      user: user && isAuthenticated() ? user : null,
+      user: user && (firebaseReady || isAuthenticated()) ? user : null,
       ready,
       login,
       logout,

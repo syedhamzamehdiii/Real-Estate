@@ -34,4 +34,6 @@ npm run dev
 
 ## Firebase
 
-Backend integration is intentionally stubbed in `src/firebase/config.ts`. Replace mock data in `src/data/` with Firestore reads when ready.
+Backend lives in `../Backend`. When `VITE_FIREBASE_*` vars are set in `.env`, the SPA uses Firestore, Storage, and Auth via `@estate-line/backend/client`. Without them, listings/resources keep the existing localStorage behavior.
+
+See `../Backend/README.md` for rules, seeding, and admin setup. Copy `.env.example` → `.env` and fill Firebase web config from the console.

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -22,10 +23,19 @@ import {
   withRegisteredMainArea,
   type ListingsStoreState,
 } from '../lib/listingsStorage'
+import { firebaseReady } from '../firebase/config'
+import {
+  createListing as fbCreateListing,
+  updateListing as fbUpdateListing,
+  deleteListing as fbDeleteListing,
+  subscribeListings,
+  subscribeListingsMeta,
+  type ListingsMeta,
+} from '@estate-line/backend/client'
+import { resolveFeaturedItems } from '@estate-line/backend'
 
 type ListingWriteOptions = {
   mainAreaLabel?: string
-  /** Current featured listing to swap out when featuring this one */
   replaceFeaturedId?: string
 }
 
@@ -33,14 +43,19 @@ type ListingsContextValue = {
   listings: Listing[]
   featuredListings: Listing[]
   mainAreas: MainArea[]
+  ready: boolean
   getById: (id: string) => Listing | undefined
   addListing: (
     input: Omit<Listing, 'id'> & { id?: string },
     options?: ListingWriteOptions,
-  ) => Listing
-  updateListing: (id: string, listing: Listing, options?: ListingWriteOptions) => void
-  removeListing: (id: string) => void
-  resetToSeed: () => void
+  ) => Promise<Listing>
+  updateListing: (
+    id: string,
+    listing: Listing,
+    options?: ListingWriteOptions,
+  ) => Promise<void>
+  removeListing: (id: string) => Promise<void>
+  resetToSeed: () => Promise<void>
 }
 
 const ListingsContext = createContext<ListingsContextValue | null>(null)
@@ -79,7 +94,7 @@ function commitListing(
   return next
 }
 
-export function ListingsProvider({ children }: { children: ReactNode }) {
+function LocalListingsProvider({ children }: { children: ReactNode }) {
   const [store, setStore] = useState<ListingsStoreState>(() => loadListingsStore())
 
   const persist = useCallback((next: ListingsStoreState) => {
@@ -105,7 +120,7 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
   )
 
   const addListing = useCallback(
-    (input: Omit<Listing, 'id'> & { id?: string }, options?: ListingWriteOptions) => {
+    async (input: Omit<Listing, 'id'> & { id?: string }, options?: ListingWriteOptions) => {
       const desired = input.id?.trim() || slugifyId(input.title)
       const id = ensureUniqueId(
         desired,
@@ -124,14 +139,14 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
   )
 
   const updateListing = useCallback(
-    (id: string, listing: Listing, options?: ListingWriteOptions) => {
+    async (id: string, listing: Listing, options?: ListingWriteOptions) => {
       persist(commitListing(store, { ...listing, id }, options))
     },
     [persist, store],
   )
 
   const removeListing = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const withoutFeatured = removeFromFeaturedOrder(store, id)
       persist({
         ...withoutFeatured,
@@ -147,7 +162,7 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
     [persist, store],
   )
 
-  const resetToSeed = useCallback(() => {
+  const resetToSeed = useCallback(async () => {
     persist({
       added: [],
       updated: {},
@@ -162,6 +177,7 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
       listings,
       featuredListings,
       mainAreas,
+      ready: true,
       getById,
       addListing,
       updateListing,
@@ -181,6 +197,122 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
   )
 
   return <ListingsContext.Provider value={value}>{children}</ListingsContext.Provider>
+}
+
+function FirebaseListingsProvider({ children }: { children: ReactNode }) {
+  const [listings, setListings] = useState<Listing[]>([])
+  const [meta, setMeta] = useState<ListingsMeta>({ featuredOrder: [], mainAreas: [] })
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    let listingsReady = false
+    let metaReady = false
+    const mark = () => {
+      if (listingsReady && metaReady) setReady(true)
+    }
+
+    const unsubListings = subscribeListings(
+      (items) => {
+        setListings(items)
+        listingsReady = true
+        mark()
+      },
+      (err) => {
+        console.error('Listings subscription failed', err)
+        listingsReady = true
+        mark()
+      },
+    )
+    const unsubMeta = subscribeListingsMeta(
+      (next) => {
+        setMeta(next)
+        metaReady = true
+        mark()
+      },
+      (err) => {
+        console.error('Listings meta subscription failed', err)
+        metaReady = true
+        mark()
+      },
+    )
+    return () => {
+      unsubListings()
+      unsubMeta()
+    }
+  }, [])
+
+  const featuredListings = useMemo(
+    () => resolveFeaturedItems(listings, meta.featuredOrder, FEATURED_SLOT_LIMIT),
+    [listings, meta.featuredOrder],
+  )
+
+  const mainAreas = useMemo(
+    () => collectMainAreas(meta.mainAreas, listings),
+    [meta.mainAreas, listings],
+  )
+
+  const getById = useCallback(
+    (id: string) => listings.find((l) => l.id === id),
+    [listings],
+  )
+
+  const addListing = useCallback(
+    async (input: Omit<Listing, 'id'> & { id?: string }, options?: ListingWriteOptions) => {
+      return fbCreateListing(input, options)
+    },
+    [],
+  )
+
+  const updateListing = useCallback(
+    async (id: string, listing: Listing, options?: ListingWriteOptions) => {
+      await fbUpdateListing(id, listing, options)
+    },
+    [],
+  )
+
+  const removeListing = useCallback(async (id: string) => {
+    await fbDeleteListing(id)
+  }, [])
+
+  const resetToSeed = useCallback(async () => {
+    console.warn(
+      'resetToSeed is a local-only helper. Re-run `npm run seed` in Backend to restore Firestore data.',
+    )
+  }, [])
+
+  const value = useMemo(
+    () => ({
+      listings,
+      featuredListings,
+      mainAreas,
+      ready,
+      getById,
+      addListing,
+      updateListing,
+      removeListing,
+      resetToSeed,
+    }),
+    [
+      listings,
+      featuredListings,
+      mainAreas,
+      ready,
+      getById,
+      addListing,
+      updateListing,
+      removeListing,
+      resetToSeed,
+    ],
+  )
+
+  return <ListingsContext.Provider value={value}>{children}</ListingsContext.Provider>
+}
+
+export function ListingsProvider({ children }: { children: ReactNode }) {
+  if (firebaseReady) {
+    return <FirebaseListingsProvider>{children}</FirebaseListingsProvider>
+  }
+  return <LocalListingsProvider>{children}</LocalListingsProvider>
 }
 
 export function useListings() {

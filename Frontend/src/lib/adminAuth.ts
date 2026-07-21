@@ -1,8 +1,15 @@
 /**
- * Admin auth — frontend gate until Firebase Auth is wired.
- * Swap `loginWithEmailPassword` / `logout` / `getSession` for Firebase
- * in `src/firebase/config.ts` without changing page UI.
+ * Admin auth — Firebase Auth when configured, local session gate otherwise.
+ * Page UI stays the same either way.
  */
+
+import { firebaseReady } from '../firebase/config'
+import {
+  loginWithEmailPassword as firebaseLogin,
+  logout as firebaseLogout,
+  getCurrentUser,
+  toAuthSession,
+} from '@estate-line/backend/client'
 
 const SESSION_KEY = 'estate-line-admin-session'
 const FAIL_KEY = 'estate-line-admin-login-fails'
@@ -17,8 +24,10 @@ export type AdminSession = {
 }
 
 function expectedEmail() {
-  return (import.meta.env.VITE_ADMIN_EMAIL as string | undefined)?.trim().toLowerCase()
-    || 'admin@estatelineproperties.com'
+  return (
+    (import.meta.env.VITE_ADMIN_EMAIL as string | undefined)?.trim().toLowerCase() ||
+    'admin@estatelineproperties.com'
+  )
 }
 
 function expectedPassword() {
@@ -45,6 +54,10 @@ export function getLoginLockRemainingMs(): number {
 }
 
 export function getSession(): AdminSession | null {
+  if (firebaseReady) {
+    // AuthProvider drives session from onAuthStateChanged; sessionStorage not used.
+    return null
+  }
   try {
     const raw = sessionStorage.getItem(SESSION_KEY)
     if (!raw) return null
@@ -61,6 +74,7 @@ export function getSession(): AdminSession | null {
 }
 
 export function isAuthenticated(): boolean {
+  if (firebaseReady) return getCurrentUser() != null
   return getSession() != null
 }
 
@@ -75,10 +89,6 @@ function createSession(email: string): AdminSession {
   }
 }
 
-/**
- * Local credential check. Replace body with Firebase Auth when ready:
- * `await signInWithEmailAndPassword(getAuth(), email, password)`
- */
 export async function loginWithEmailPassword(
   email: string,
   password: string,
@@ -88,13 +98,28 @@ export async function loginWithEmailPassword(
     throw new Error(`Too many attempts. Try again in ${Math.ceil(lockMs / 1000)}s.`)
   }
 
-  // Simulate network latency (matches future Firebase call)
+  if (firebaseReady) {
+    try {
+      const session = await firebaseLogin(email, password)
+      sessionStorage.removeItem(FAIL_KEY)
+      return {
+        email: session.email,
+        token: session.token,
+        expiresAt: session.expiresAt,
+      }
+    } catch {
+      const fails = readFails()
+      const count = fails.count + 1
+      const lockedUntil = count >= MAX_ATTEMPTS ? Date.now() + LOCKOUT_MS : 0
+      writeFails(count >= MAX_ATTEMPTS ? 0 : count, lockedUntil)
+      throw new Error('Invalid email or password.')
+    }
+  }
+
   await new Promise((r) => setTimeout(r, 350))
 
   const normalized = email.trim().toLowerCase()
-  const ok =
-    normalized === expectedEmail() &&
-    password === expectedPassword()
+  const ok = normalized === expectedEmail() && password === expectedPassword()
 
   if (!ok) {
     const fails = readFails()
@@ -110,7 +135,22 @@ export async function loginWithEmailPassword(
   return session
 }
 
-/** Replace with Firebase `signOut(getAuth())` when wired. */
-export function logout(): void {
+export async function logout(): Promise<void> {
+  if (firebaseReady) {
+    await firebaseLogout()
+  }
   sessionStorage.removeItem(SESSION_KEY)
+}
+
+/** Hydrate AdminSession from the current Firebase user (if any). */
+export async function sessionFromFirebaseUser(): Promise<AdminSession | null> {
+  if (!firebaseReady) return null
+  const user = getCurrentUser()
+  if (!user) return null
+  const session = await toAuthSession(user)
+  return {
+    email: session.email,
+    token: session.token,
+    expiresAt: session.expiresAt,
+  }
 }

@@ -1,0 +1,162 @@
+rules_version = '2';
+
+/**
+ * Estate Line Properties — Firestore security rules
+ *
+ * Access model (matches the SPA):
+ * - Public site: read listings, resources, and featured/meta config
+ * - Contact form: anyone may create an inquiry
+ * - Admin (Firebase Auth): full CRUD on listings, resources, meta; read inquiries
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isString(value) {
+      return value is string;
+    }
+
+    function isNonEmptyString(value, maxLen) {
+      return isString(value)
+        && value.size() > 0
+        && value.size() <= maxLen;
+    }
+
+    function validPropertyType() {
+      return request.resource.data.type in ['House', 'Plot', 'Apartment', 'Commercial'];
+    }
+
+    function validPropertyStatus() {
+      return request.resource.data.status in ['For Sale', 'For Rent'];
+    }
+
+    function validListingKeys() {
+      return request.resource.data.keys().hasAll([
+        'id', 'title', 'location', 'locationKey', 'type', 'status',
+        'priceLabel', 'priceValue', 'image', 'sizeLabel', 'description',
+        'createdAt', 'updatedAt', 'ownerId'
+      ]);
+    }
+
+    function validListingWrite() {
+      let d = request.resource.data;
+      return validListingKeys()
+        && d.id == request.resource.id
+        && isNonEmptyString(d.title, 200)
+        && isNonEmptyString(d.location, 200)
+        && isNonEmptyString(d.locationKey, 80)
+        && validPropertyType()
+        && validPropertyStatus()
+        && isNonEmptyString(d.priceLabel, 80)
+        && d.priceValue is number
+        && d.priceValue >= 0
+        && isNonEmptyString(d.image, 2048)
+        && isNonEmptyString(d.sizeLabel, 80)
+        && isNonEmptyString(d.description, 10000)
+        && isString(d.ownerId)
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp
+        && (!('featured' in d) || d.featured is bool)
+        && (!('images' in d) || (d.images is list && d.images.size() <= 24))
+        && (!('beds' in d) || d.beds is number)
+        && (!('baths' in d) || d.baths is number)
+        && (!('details' in d) || d.details is map);
+    }
+
+    function validResourceKeys() {
+      return request.resource.data.keys().hasAll([
+        'id', 'slug', 'category', 'title', 'excerpt', 'content',
+        'image', 'author', 'readMinutes', 'publishedAt',
+        'createdAt', 'updatedAt', 'ownerId'
+      ]);
+    }
+
+    function validResourceWrite() {
+      let d = request.resource.data;
+      return validResourceKeys()
+        && d.id == request.resource.id
+        && isNonEmptyString(d.slug, 120)
+        && isNonEmptyString(d.category, 80)
+        && isNonEmptyString(d.title, 200)
+        && isNonEmptyString(d.excerpt, 500)
+        && isNonEmptyString(d.content, 50000)
+        && isNonEmptyString(d.image, 2048)
+        && isNonEmptyString(d.author, 120)
+        && d.readMinutes is number
+        && d.readMinutes >= 1
+        && d.readMinutes <= 120
+        && isNonEmptyString(d.publishedAt, 32)
+        && isString(d.ownerId)
+        && d.createdAt is timestamp
+        && d.updatedAt is timestamp
+        && (!('featured' in d) || d.featured is bool);
+    }
+
+    function validInquiryWrite() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['name', 'email', 'phone', 'message', 'interest', 'createdAt', 'status'])
+        && isNonEmptyString(d.name, 120)
+        && isNonEmptyString(d.email, 200)
+        && d.email.matches('.*@.*\\..*')
+        && isNonEmptyString(d.phone, 40)
+        && isNonEmptyString(d.message, 5000)
+        && isNonEmptyString(d.interest, 120)
+        && d.status == 'new'
+        && d.createdAt is timestamp
+        && !('ownerId' in d);
+    }
+
+    function validListingsMeta() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['featuredOrder', 'mainAreas', 'updatedAt'])
+        && d.featuredOrder is list
+        && d.featuredOrder.size() <= 3
+        && d.mainAreas is list
+        && d.mainAreas.size() <= 200
+        && d.updatedAt is timestamp;
+    }
+
+    function validResourcesMeta() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['featuredOrder', 'nextNumericId', 'updatedAt'])
+        && d.featuredOrder is list
+        && d.featuredOrder.size() <= 5
+        && d.nextNumericId is number
+        && d.nextNumericId >= 1
+        && d.updatedAt is timestamp;
+    }
+
+    match /listings/{listingId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && validListingWrite();
+      allow delete: if isSignedIn();
+    }
+
+    match /resources/{resourceId} {
+      allow read: if true;
+      allow create, update: if isSignedIn() && validResourceWrite();
+      allow delete: if isSignedIn();
+    }
+
+    match /meta/{docId} {
+      allow read: if true;
+      allow create, update: if isSignedIn()
+        && (
+          (docId == 'listings' && validListingsMeta())
+          || (docId == 'resources' && validResourcesMeta())
+        );
+      allow delete: if false;
+    }
+
+    match /inquiries/{inquiryId} {
+      allow create: if validInquiryWrite();
+      allow read, update, delete: if isSignedIn();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

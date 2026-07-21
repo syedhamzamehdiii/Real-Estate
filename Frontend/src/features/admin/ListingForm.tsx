@@ -247,6 +247,7 @@ function ListingEditor({
   )
   const [errors, setErrors] = useState<Errors>({})
   const [savedFlash, setSavedFlash] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState<'cover' | 'gallery' | null>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
@@ -334,7 +335,7 @@ function ListingEditor({
     setForm((prev) => ({ ...prev, image: '' }))
   }
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     const nextErrors = validate(form, { needsFeaturedReplace })
     setErrors(nextErrors)
@@ -353,15 +354,23 @@ function ListingEditor({
       replaceFeaturedId: needsFeaturedReplace ? form.replaceFeaturedId : undefined,
     }
 
-    if (mode === 'edit' && listing) {
-      updateListing(listing.id, { ...payload, id: listing.id }, writeOptions)
-      setSavedFlash(true)
-      window.setTimeout(() => {
-        navigate('/admin', { state: { notice: 'Changes saved' } })
-      }, 700)
-    } else {
-      addListing(payload, writeOptions)
-      navigate('/admin', { state: { notice: 'Listing created' } })
+    setSaving(true)
+    try {
+      if (mode === 'edit' && listing) {
+        await updateListing(listing.id, { ...payload, id: listing.id }, writeOptions)
+        setSavedFlash(true)
+        window.setTimeout(() => {
+          navigate('/admin', { state: { notice: 'Changes saved' } })
+        }, 700)
+      } else {
+        await addListing(payload, writeOptions)
+        navigate('/admin', { state: { notice: 'Listing created' } })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not save listing'
+      setErrors((prev) => ({ ...prev, title: message }))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -838,7 +847,13 @@ function ListingEditor({
           <Button variant="outline" to="/admin">
             Cancel
           </Button>
-          <Button type="submit">{mode === 'create' ? 'Create listing' : 'Save changes'}</Button>
+          <Button type="submit" disabled={saving || uploading != null}>
+            {saving
+              ? 'Saving…'
+              : mode === 'create'
+                ? 'Create listing'
+                : 'Save changes'}
+          </Button>
         </div>
       </form>
     </div>

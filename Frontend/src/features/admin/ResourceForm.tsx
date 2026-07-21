@@ -129,6 +129,7 @@ function ResourceEditor({
   )
   const [errors, setErrors] = useState<Errors>({})
   const [savedFlash, setSavedFlash] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
@@ -195,7 +196,7 @@ function ResourceEditor({
 
   const clearCover = () => setForm((prev) => ({ ...prev, image: '' }))
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     const nextErrors = validate(form, { needsFeaturedReplace })
     setErrors(nextErrors)
@@ -206,15 +207,23 @@ function ResourceEditor({
       replaceFeaturedId: needsFeaturedReplace ? form.replaceFeaturedId : undefined,
     }
 
-    if (mode === 'edit' && post) {
-      updatePost(post.id, { ...payload, id: post.id }, writeOptions)
-      setSavedFlash(true)
-      window.setTimeout(() => {
-        navigate('/admin/resources', { state: { notice: 'Changes saved' } })
-      }, 700)
-    } else {
-      addPost(payload, writeOptions)
-      navigate('/admin/resources', { state: { notice: 'Resource created' } })
+    setSaving(true)
+    try {
+      if (mode === 'edit' && post) {
+        await updatePost(post.id, { ...payload, id: post.id }, writeOptions)
+        setSavedFlash(true)
+        window.setTimeout(() => {
+          navigate('/admin/resources', { state: { notice: 'Changes saved' } })
+        }, 700)
+      } else {
+        await addPost(payload, writeOptions)
+        navigate('/admin/resources', { state: { notice: 'Resource created' } })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not save resource'
+      setErrors((prev) => ({ ...prev, title: message }))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -434,7 +443,13 @@ function ResourceEditor({
           <Button variant="outline" to="/admin/resources">
             Cancel
           </Button>
-          <Button type="submit">{mode === 'create' ? 'Create resource' : 'Save changes'}</Button>
+          <Button type="submit" disabled={saving || uploading}>
+            {saving
+              ? 'Saving…'
+              : mode === 'create'
+                ? 'Create resource'
+                : 'Save changes'}
+          </Button>
         </div>
       </form>
     </div>

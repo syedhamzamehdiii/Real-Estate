@@ -1,0 +1,56 @@
+rules_version = '2';
+
+/**
+ * Estate Line Properties — Firebase Storage rules
+ *
+ * Layout:
+ *   listings/{listingId}/cover.jpg
+ *   listings/{listingId}/gallery/{fileName}
+ *   resources/{resourceId}/cover.jpg
+ *
+ * Public read (CDN download URLs). Authenticated admins may upload/replace/delete.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isImage() {
+      return request.resource != null
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function underSizeLimit() {
+      // 8 MiB after client-side compression
+      return request.resource.size < 8 * 1024 * 1024;
+    }
+
+    function validImageUpload() {
+      return isSignedIn() && isImage() && underSizeLimit();
+    }
+
+    match /listings/{listingId}/cover.jpg {
+      allow read: if true;
+      allow write: if validImageUpload();
+      allow delete: if isSignedIn();
+    }
+
+    match /listings/{listingId}/gallery/{fileName} {
+      allow read: if true;
+      allow write: if validImageUpload()
+        && fileName.matches('^[a-zA-Z0-9._-]{1,120}$');
+      allow delete: if isSignedIn();
+    }
+
+    match /resources/{resourceId}/cover.jpg {
+      allow read: if true;
+      allow write: if validImageUpload();
+      allow delete: if isSignedIn();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
