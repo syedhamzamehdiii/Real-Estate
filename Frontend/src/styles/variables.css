@@ -1,0 +1,20 @@
+:root {
+  --navy-950: #061826;
+  --navy-900: #0b2131;
+  --navy-800: #1a303f;
+  --slate-600: #2b505c;
+  --sage-400: #607d7e;
+  --cream-100: #e6d6c1;
+  --cream-050: #f2eade;
+  --gold-700: #6c581c;
+  --gold-500: #c9a227;
+  --gold-300: #e8c968;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'Manrope', system-ui, sans-serif;
+  --ease: cubic-bezier(0.16, 0.8, 0.28, 1);
+  --header-h: 88px;
+  --page-x: clamp(1.1rem, 5vw, 6vw);
+  --radius-lg: 18px;
+  --radius-pill: 100px;
+  --touch-min: 44px;
+}

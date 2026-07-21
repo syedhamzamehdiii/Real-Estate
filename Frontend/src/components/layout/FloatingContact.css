@@ -1,0 +1,63 @@
+.floating-contact {
+  position: fixed;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.fab {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 26px -6px rgba(0, 0, 0, 0.6);
+  color: var(--navy-950);
+  transition: transform 0.3s var(--ease);
+}
+
+.fab:hover {
+  transform: scale(1.08);
+}
+
+.fab-call {
+  background: linear-gradient(135deg, var(--gold-700), var(--gold-500));
+}
+
+.fab-wa {
+  background: #25d366;
+  color: #fff;
+}
+
+.fab-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--gold-500);
+  animation: pulse 2.2s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .fab {
+    width: 50px;
+    height: 50px;
+  }
+}
