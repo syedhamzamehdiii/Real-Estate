@@ -19,7 +19,7 @@ export function AdminLayout() {
           <span className="admin-brand-mark">EL</span>
           <div>
             <strong>{SITE.name}</strong>
-            <span>Admin</span>
+            <span className="admin-brand-meta">Admin</span>
           </div>
         </div>
 

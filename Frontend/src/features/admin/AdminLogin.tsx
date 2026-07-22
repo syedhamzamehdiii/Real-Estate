@@ -59,7 +59,7 @@ export function AdminLoginPage() {
           <span className="admin-brand-mark">EL</span>
           <div>
             <strong>{SITE.name}</strong>
-            <span>Admin access</span>
+            <span className="admin-brand-meta">Admin access</span>
           </div>
         </div>
 

@@ -1,4 +1,5 @@
 import { ZodError } from 'zod'
+import { FirebaseError } from 'firebase/app'
 
 /** Map form error keys → element ids to scroll/focus. */
 export type FieldIdMap = Record<string, string>
@@ -37,17 +38,28 @@ export function scrollToFirstError(
   })
 }
 
-/** Turn Zod / Storage / generic save failures into field → message map. */
+/** Turn Zod / Storage / Firestore / generic save failures into field → message map. */
 export function mapSaveError(err: unknown): Record<string, string> {
   if (err instanceof ZodError) {
     const out: Record<string, string> = {}
     for (const issue of err.issues) {
       const raw = issue.path[0]
       const key =
-        raw === 'images' ? 'image' : raw != null ? String(raw) : 'form'
+        raw === 'images' ? 'gallery' : raw != null ? String(raw) : 'form'
       if (!out[key]) out[key] = issue.message
     }
     return Object.keys(out).length ? out : { form: 'Validation failed' }
+  }
+
+  if (err instanceof FirebaseError) {
+    if (err.code.startsWith('storage/')) {
+      return {
+        image: err.message,
+        upload: err.message,
+      }
+    }
+    // Firestore permission-denied, etc. — show as form banner, not photo fields
+    return { form: `${err.message} (${err.code})` }
   }
 
   const message = err instanceof Error ? err.message : 'Could not save'
@@ -65,7 +77,7 @@ export function mapSaveError(err: unknown): Record<string, string> {
         for (const issue of parsed) {
           const raw = issue.path?.[0]
           const key =
-            raw === 'images' ? 'image' : raw != null ? String(raw) : 'form'
+            raw === 'images' ? 'gallery' : raw != null ? String(raw) : 'form'
           if (issue.message && !out[key]) out[key] = issue.message
         }
         if (Object.keys(out).length) return out
@@ -75,7 +87,7 @@ export function mapSaveError(err: unknown): Record<string, string> {
     }
   }
 
-  if (/storage|upload|image|permission|unauthorized|network/i.test(message)) {
+  if (/storage\//i.test(message) || /upload was blocked by Storage/i.test(message)) {
     return { image: message, upload: message }
   }
 

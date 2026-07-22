@@ -12,12 +12,39 @@ export function toIsoDate(value: unknown): string | undefined {
   return undefined
 }
 
+/**
+ * Firestore FieldValue sentinels (serverTimestamp, deleteField, etc.) are plain
+ * objects with `_methodName`. Recursing into them destroys the sentinel and
+ * causes security-rules `is timestamp` checks to fail with permission-denied.
+ */
+function isFirestoreSentinel(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    '_methodName' in (value as Record<string, unknown>)
+  )
+}
+
+function isPlainDataObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  if (value instanceof Date) return false
+  if (isFirestoreSentinel(value)) return false
+  // Firestore Timestamp instances
+  if (typeof (value as { toDate?: unknown }).toDate === 'function') return false
+  const proto = Object.getPrototypeOf(value)
+  return proto === Object.prototype || proto === null
+}
+
+/**
+ * Drop `undefined` and empty-string fields before setDoc.
+ * Preserves FieldValue sentinels and Timestamps.
+ */
 export function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(obj)) {
-    if (value === undefined) continue
-    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-      out[key] = stripUndefined(value as Record<string, unknown>)
+    if (value === undefined || value === '') continue
+    if (isPlainDataObject(value)) {
+      out[key] = stripUndefined(value)
     } else {
       out[key] = value
     }

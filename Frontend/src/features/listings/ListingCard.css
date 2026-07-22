@@ -27,7 +27,7 @@
 
 .card-img {
   position: relative;
-  height: 220px;
+  aspect-ratio: 3 / 2;
   overflow: hidden;
 }
 

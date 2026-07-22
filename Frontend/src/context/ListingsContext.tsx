@@ -9,7 +9,7 @@ import {
 } from 'react'
 import type { Listing } from '../types'
 import { SEED_LISTINGS } from '../data/listings'
-import { collectMainAreas, type MainArea } from '../lib/mainAreas'
+import { collectMainAreas, collectSelectableMainAreas, type MainArea } from '../lib/mainAreas'
 import {
   applyFeaturedPlacement,
   ensureUniqueId,
@@ -42,7 +42,10 @@ type ListingWriteOptions = {
 type ListingsContextValue = {
   listings: Listing[]
   featuredListings: Listing[]
+  /** Public filters — only areas that currently have listings. */
   mainAreas: MainArea[]
+  /** Admin form picker — includes empty built-in areas. */
+  selectableMainAreas: MainArea[]
   ready: boolean
   getById: (id: string) => Listing | undefined
   addListing: (
@@ -114,6 +117,11 @@ function LocalListingsProvider({ children }: { children: ReactNode }) {
     [store.mainAreas, listings],
   )
 
+  const selectableMainAreas = useMemo(
+    () => collectSelectableMainAreas(store.mainAreas, listings),
+    [store.mainAreas, listings],
+  )
+
   const getById = useCallback(
     (id: string) => listings.find((l) => l.id === id),
     [listings],
@@ -147,8 +155,10 @@ function LocalListingsProvider({ children }: { children: ReactNode }) {
 
   const removeListing = useCallback(
     async (id: string) => {
+      const target = listings.find((l) => l.id === id)
+      const locationKey = target?.locationKey
       const withoutFeatured = removeFromFeaturedOrder(store, id)
-      persist({
+      let next: ListingsStoreState = {
         ...withoutFeatured,
         added: withoutFeatured.added.filter((l) => l.id !== id),
         updated: Object.fromEntries(
@@ -157,9 +167,20 @@ function LocalListingsProvider({ children }: { children: ReactNode }) {
         removed: withoutFeatured.removed.includes(id)
           ? withoutFeatured.removed
           : [...withoutFeatured.removed, id],
-      })
+      }
+
+      if (locationKey) {
+        const remaining = mergeListings(next)
+        const usedKeys = new Set(remaining.map((l) => l.locationKey).filter(Boolean))
+        next = {
+          ...next,
+          mainAreas: next.mainAreas.filter((a) => usedKeys.has(a.value)),
+        }
+      }
+
+      persist(next)
     },
-    [persist, store],
+    [listings, persist, store],
   )
 
   const resetToSeed = useCallback(async () => {
@@ -177,6 +198,7 @@ function LocalListingsProvider({ children }: { children: ReactNode }) {
       listings,
       featuredListings,
       mainAreas,
+      selectableMainAreas,
       ready: true,
       getById,
       addListing,
@@ -188,6 +210,7 @@ function LocalListingsProvider({ children }: { children: ReactNode }) {
       listings,
       featuredListings,
       mainAreas,
+      selectableMainAreas,
       getById,
       addListing,
       updateListing,
@@ -251,6 +274,11 @@ function FirebaseListingsProvider({ children }: { children: ReactNode }) {
     [meta.mainAreas, listings],
   )
 
+  const selectableMainAreas = useMemo(
+    () => collectSelectableMainAreas(meta.mainAreas, listings),
+    [meta.mainAreas, listings],
+  )
+
   const getById = useCallback(
     (id: string) => listings.find((l) => l.id === id),
     [listings],
@@ -285,6 +313,7 @@ function FirebaseListingsProvider({ children }: { children: ReactNode }) {
       listings,
       featuredListings,
       mainAreas,
+      selectableMainAreas,
       ready,
       getById,
       addListing,
@@ -296,6 +325,7 @@ function FirebaseListingsProvider({ children }: { children: ReactNode }) {
       listings,
       featuredListings,
       mainAreas,
+      selectableMainAreas,
       ready,
       getById,
       addListing,

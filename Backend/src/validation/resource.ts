@@ -8,7 +8,7 @@ const imageUrlSchema = z
   .string()
   .trim()
   .min(1)
-  .max(2048)
+  .max(4096)
   .refine((value) => /^https?:\/\//i.test(value), {
     message: 'Image must be an HTTP(S) URL after upload',
   })
@@ -34,6 +34,7 @@ export const resourceDraftSchema = z
   .object({
     ...resourceFieldsBase,
     image: imageSourceSchema,
+    thumbnail: imageSourceSchema.optional(),
   })
   .strict()
 
@@ -42,6 +43,7 @@ export const resourceInputSchema = z
   .object({
     ...resourceFieldsBase,
     image: imageUrlSchema,
+    thumbnail: imageUrlSchema.optional(),
   })
   .strict()
 

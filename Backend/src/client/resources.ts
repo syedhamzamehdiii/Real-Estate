@@ -58,6 +58,7 @@ function toPublicPost(data: ResourceDocument | (BlogPost & Record<string, unknow
     publishedAt: String(data.publishedAt),
   }
   if (data.featured != null) post.featured = Boolean(data.featured)
+  if (typeof data.thumbnail === 'string' && data.thumbnail) post.thumbnail = data.thumbnail
   return post
 }
 
@@ -148,8 +149,14 @@ export async function createResource(
   )
   const draft = validateResourceDraft({ ...input, id, slug })
 
-  const image = await persistResourceImage(id, draft.image)
-  const parsed = validateResourceInput({ ...draft, id, slug, image })
+  const imagesPersisted = await persistResourceImage(id, draft.image, draft.thumbnail)
+  const parsed = validateResourceInput({
+    ...draft,
+    id,
+    slug,
+    image: imagesPersisted.image,
+    thumbnail: imagesPersisted.thumbnail,
+  })
 
   const featuredOrder = await placeResourceFeatured(
     id,
@@ -189,8 +196,14 @@ export async function updateResource(
     others.map((p) => p.slug),
   )
   const draft = validateResourceDraft({ ...input, id, slug })
-  const image = await persistResourceImage(id, draft.image)
-  const parsed = validateResourceInput({ ...draft, id, slug, image })
+  const imagesPersisted = await persistResourceImage(id, draft.image, draft.thumbnail)
+  const parsed = validateResourceInput({
+    ...draft,
+    id,
+    slug,
+    image: imagesPersisted.image,
+    thumbnail: imagesPersisted.thumbnail,
+  })
 
   const featuredOrder = await placeResourceFeatured(
     id,

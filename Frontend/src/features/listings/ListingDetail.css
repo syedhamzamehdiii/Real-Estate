@@ -18,10 +18,35 @@
   object-fit: cover;
   opacity: 0;
   transition: opacity 0.55s var(--ease);
+  z-index: 0;
 }
 
 .detail-hero img.is-active {
   opacity: 1;
+}
+
+.detail-hero-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.detail-hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(6, 24, 38, 0.35), rgba(6, 24, 38, 0.92));
+}
+
+.detail-hero-content {
+  position: relative;
+  z-index: 2;
+  padding: calc(var(--header-h) + 2rem) var(--page-x) 3rem;
+  max-width: 900px;
 }
 
 .detail-gallery-controls {
@@ -80,19 +105,6 @@
   letter-spacing: 0.06em;
   color: var(--sage-400);
   min-width: 2.8rem;
-}
-
-.detail-hero-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(6, 24, 38, 0.35), rgba(6, 24, 38, 0.92));
-}
-
-.detail-hero-content {
-  position: relative;
-  z-index: 1;
-  padding: calc(var(--header-h) + 2rem) var(--page-x) 3rem;
-  max-width: 900px;
 }
 
 .back-link {

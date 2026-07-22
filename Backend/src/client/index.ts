@@ -38,7 +38,10 @@ export {
   subscribeListingsMeta,
   subscribeResourcesMeta,
   upsertMainArea,
+  removeMainAreaIfUnused,
+  syncMainAreasFromListings,
   placeListingFeatured,
+  commitListingMetaWrite,
   placeResourceFeatured,
   allocateResourceId,
 } from './meta'

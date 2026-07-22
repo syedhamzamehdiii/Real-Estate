@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useListings } from '../../context/ListingsContext'
+import { cardImageSrc } from '../../lib/imageUpload'
 import { Button } from '../../components/ui'
 import './Admin.css'
 
@@ -102,7 +103,7 @@ export function AdminDashboard() {
                 <tr key={listing.id}>
                   <td>
                     <div className="admin-listing-cell">
-                      <img src={listing.image} alt="" />
+                      <img src={cardImageSrc(listing)} alt="" />
                       <div>
                         <strong>{listing.title}</strong>
                         <span>{listing.location}</span>

@@ -1,6 +1,7 @@
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { Button, Reveal } from '../../components/ui'
+import { MediaViewer } from '../../components/media/MediaViewer'
 import { useListings } from '../../context/ListingsContext'
 import { SITE } from '../../data/site'
 import { getListingGallery } from '../../lib/listings'
@@ -8,8 +9,6 @@ import type { ListingDetails } from '../../types'
 import './ListingDetail.css'
 
 const DETAIL_FIELDS: { key: keyof ListingDetails; label: string }[] = [
-  { key: 'beds', label: 'Beds' },
-  { key: 'baths', label: 'Baths' },
   { key: 'floors', label: 'Floors' },
   { key: 'yearBuilt', label: 'Year built' },
   { key: 'plotSize', label: 'Plot size' },
@@ -35,16 +34,18 @@ export function ListingDetailPage() {
   const { getById } = useListings()
   const listing = getById(id ?? '')
   const [activeImage, setActiveImage] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const gallery = listing ? getListingGallery(listing) : []
 
   useEffect(() => {
     setActiveImage(0)
+    setLightboxOpen(false)
   }, [id])
 
   if (!listing) {
     return <Navigate to="/listings" replace />
   }
 
-  const gallery = getListingGallery(listing)
   const hasGallery = gallery.length > 1
   const details = listing.details
   const detailRows = details ? detailEntries(details) : []
@@ -77,6 +78,12 @@ export function ListingDetailPage() {
             className={index === activeImage ? 'is-active' : undefined}
           />
         ))}
+        <button
+          type="button"
+          className="detail-hero-open"
+          aria-label={hasGallery ? 'View all photos' : 'View photo'}
+          onClick={() => setLightboxOpen(true)}
+        />
         <div className="detail-hero-overlay" />
         <div className="detail-hero-content">
           <Link to="/listings" className="back-link">
@@ -115,6 +122,49 @@ export function ListingDetailPage() {
           </div>
         ) : null}
       </div>
+
+      <MediaViewer
+        open={lightboxOpen}
+        images={gallery.map((src, index) => ({
+          src,
+          alt: `${listing.title} — photo ${index + 1}`,
+        }))}
+        index={activeImage}
+        onIndexChange={setActiveImage}
+        onClose={() => setLightboxOpen(false)}
+        title={`${listing.title} photos`}
+        details={
+          <>
+            <span className="badge">{listing.status}</span>
+            <h2>{listing.title}</h2>
+            <p className="media-meta">{listing.location}</p>
+            <p className="media-price">{listing.priceLabel}</p>
+            <p className="media-copy">{listing.description}</p>
+            <div className="media-specs">
+              <div>
+                <span>Type</span>
+                <strong>{listing.type}</strong>
+              </div>
+              {listing.beds != null ? (
+                <div>
+                  <span>Beds</span>
+                  <strong>{listing.beds}</strong>
+                </div>
+              ) : null}
+              {listing.baths != null ? (
+                <div>
+                  <span>Baths</span>
+                  <strong>{listing.baths}</strong>
+                </div>
+              ) : null}
+              <div>
+                <span>Size</span>
+                <strong>{listing.sizeLabel}</strong>
+              </div>
+            </div>
+          </>
+        }
+      />
 
       <section className="section detail-body">
         <Reveal className="detail-grid">

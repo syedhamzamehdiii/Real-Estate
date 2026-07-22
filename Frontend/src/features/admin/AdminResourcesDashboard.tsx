@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui'
 import { useResources } from '../../context/ResourcesContext'
+import { cardImageSrc } from '../../lib/imageUpload'
 import './Admin.css'
 
 export function AdminResourcesDashboard() {
@@ -116,7 +117,7 @@ export function AdminResourcesDashboard() {
                 <tr key={post.id}>
                   <td>
                     <div className="admin-listing-cell">
-                      <img src={post.image} alt="" />
+                      <img src={cardImageSrc(post)} alt="" />
                       <div>
                         <strong>{post.title}</strong>
                         <span>{post.excerpt.slice(0, 72)}{post.excerpt.length > 72 ? '…' : ''}</span>

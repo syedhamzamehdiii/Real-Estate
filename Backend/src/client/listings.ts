@@ -33,7 +33,9 @@ import { persistListingImages } from './storage'
 import {
   getListingsMeta,
   placeListingFeatured,
-  upsertMainArea,
+  commitListingMetaWrite,
+  removeMainAreaIfUnused,
+  syncMainAreasFromListings,
 } from './meta'
 import { resolveFeaturedItems, FEATURED_LISTING_LIMIT } from '../utils/featured'
 
@@ -58,6 +60,10 @@ function toPublicListing(data: ListingDocument | (Listing & Record<string, unkno
     description: String(data.description),
   }
   if (Array.isArray(data.images) && data.images.length) listing.images = data.images as string[]
+  if (typeof data.thumbnail === 'string' && data.thumbnail) listing.thumbnail = data.thumbnail
+  if (Array.isArray(data.imageThumbnails) && data.imageThumbnails.length) {
+    listing.imageThumbnails = data.imageThumbnails as string[]
+  }
   if (data.beds != null) listing.beds = Number(data.beds)
   if (data.baths != null) listing.baths = Number(data.baths)
   if (data.featured != null) listing.featured = Boolean(data.featured)
@@ -161,30 +167,26 @@ export async function createListing(
     id,
     draft.image,
     draft.images ?? [],
+    draft.thumbnail,
+    draft.imageThumbnails ?? [],
   )
 
   const parsed = validateListingInput({
     ...draft,
     id,
     image: imagesPersisted.image,
+    thumbnail: imagesPersisted.thumbnail,
     images: imagesPersisted.images.length ? imagesPersisted.images : undefined,
+    imageThumbnails: imagesPersisted.imageThumbnails,
   })
 
-  const featuredOrder = await placeListingFeatured(
-    id,
-    Boolean(parsed.featured),
-    options?.replaceFeaturedId,
-  )
-  const featured = featuredOrder.includes(id)
+  const wantFeatured = Boolean(parsed.featured)
 
-  if (options?.mainAreaLabel || parsed.location) {
-    await upsertMainArea(parsed.locationKey, options?.mainAreaLabel || parsed.location)
-  }
-
+  // Write the listing first so a meta-only success cannot leave orphan featured slots.
   const docData = stripUndefined({
     ...parsed,
     id,
-    featured,
+    featured: wantFeatured,
     ownerId: uid,
     createdBy: uid,
     updatedBy: uid,
@@ -193,6 +195,42 @@ export async function createListing(
   })
 
   await setDoc(doc(getDb(), COLLECTIONS.listings, id), docData)
+
+  let featuredOrder: string[]
+  try {
+    featuredOrder = await commitListingMetaWrite({
+      listingId: id,
+      featured: wantFeatured,
+      replaceFeaturedId: options?.replaceFeaturedId,
+      mainArea:
+        options?.mainAreaLabel || parsed.location
+          ? {
+              value: parsed.locationKey,
+              label: options?.mainAreaLabel || parsed.location,
+            }
+          : undefined,
+    })
+  } catch (err) {
+    const meta = await getListingsMeta().catch(() => null)
+    const actuallyFeatured = Boolean(meta?.featuredOrder.includes(id))
+    if (actuallyFeatured !== wantFeatured) {
+      await updateDoc(doc(getDb(), COLLECTIONS.listings, id), {
+        featured: actuallyFeatured,
+        updatedAt: serverTimestamp(),
+      }).catch(() => undefined)
+    }
+    throw err
+  }
+
+  const featured = featuredOrder.includes(id)
+  if (featured !== wantFeatured) {
+    await updateDoc(doc(getDb(), COLLECTIONS.listings, id), {
+      featured,
+      updatedAt: serverTimestamp(),
+    })
+    docData.featured = featured
+  }
+
   return toPublicListing(docData as ListingDocument)
 }
 
@@ -206,35 +244,36 @@ export async function updateListing(
   const existingSnap = await getDoc(doc(getDb(), COLLECTIONS.listings, id))
   if (!existingSnap.exists()) throw new Error(`Listing "${id}" not found.`)
 
+  const previousLocationKey =
+    typeof existingSnap.data().locationKey === 'string'
+      ? (existingSnap.data().locationKey as string)
+      : undefined
+
   const imagesPersisted = await persistListingImages(
     id,
     draft.image,
     draft.images ?? [],
+    draft.thumbnail,
+    draft.imageThumbnails ?? [],
   )
 
   const parsed = validateListingInput({
     ...draft,
     id,
     image: imagesPersisted.image,
+    thumbnail: imagesPersisted.thumbnail,
     images: imagesPersisted.images.length ? imagesPersisted.images : undefined,
+    imageThumbnails: imagesPersisted.imageThumbnails,
   })
 
-  const featuredOrder = await placeListingFeatured(
-    id,
-    Boolean(parsed.featured),
-    options?.replaceFeaturedId,
-  )
-  const featured = featuredOrder.includes(id)
-
-  if (options?.mainAreaLabel || parsed.location) {
-    await upsertMainArea(parsed.locationKey, options?.mainAreaLabel || parsed.location)
-  }
-
+  const wantFeatured = Boolean(parsed.featured)
   const prev = existingSnap.data()
+  const listingRef = doc(getDb(), COLLECTIONS.listings, id)
+
   const docData = stripUndefined({
     ...parsed,
     id,
-    featured,
+    featured: wantFeatured,
     ownerId: prev.ownerId ?? uid,
     createdBy: prev.createdBy ?? uid,
     updatedBy: uid,
@@ -242,7 +281,51 @@ export async function updateListing(
     updatedAt: serverTimestamp(),
   })
 
-  await setDoc(doc(getDb(), COLLECTIONS.listings, id), docData)
+  await setDoc(listingRef, docData)
+
+  let featuredOrder: string[]
+  try {
+    featuredOrder = await commitListingMetaWrite({
+      listingId: id,
+      featured: wantFeatured,
+      replaceFeaturedId: options?.replaceFeaturedId,
+      mainArea:
+        options?.mainAreaLabel || parsed.location
+          ? {
+              value: parsed.locationKey,
+              label: options?.mainAreaLabel || parsed.location,
+            }
+          : undefined,
+    })
+  } catch (err) {
+    const meta = await getListingsMeta().catch(() => null)
+    const actuallyFeatured = Boolean(meta?.featuredOrder.includes(id))
+    if (actuallyFeatured !== wantFeatured) {
+      await updateDoc(listingRef, {
+        featured: actuallyFeatured,
+        updatedAt: serverTimestamp(),
+      }).catch(() => undefined)
+    }
+    throw err
+  }
+
+  const featured = featuredOrder.includes(id)
+  if (featured !== wantFeatured) {
+    await updateDoc(listingRef, {
+      featured,
+      updatedAt: serverTimestamp(),
+    })
+    docData.featured = featured
+  }
+
+  if (previousLocationKey && previousLocationKey !== parsed.locationKey) {
+    const remaining = await listAllListings()
+    await removeMainAreaIfUnused(
+      previousLocationKey,
+      remaining.map((l) => l.locationKey),
+    )
+  }
+
   return toPublicListing(docData as ListingDocument)
 }
 
@@ -250,6 +333,11 @@ export async function deleteListing(id: string): Promise<void> {
   requireUid()
   await placeListingFeatured(id, false)
   await deleteDoc(doc(getDb(), COLLECTIONS.listings, id))
+
+  const remaining = await listAllListings()
+  await syncMainAreasFromListings(
+    remaining.map((l) => ({ locationKey: l.locationKey, location: l.location })),
+  )
 }
 
 /** Sync `featured` flags on listing docs to match meta.featuredOrder. */

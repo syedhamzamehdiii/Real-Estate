@@ -1,15 +1,18 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui'
+import { ImageCropModal } from '../../components/media/ImageCropModal'
 import { useListings } from '../../context/ListingsContext'
 import { PROPERTY_TYPES } from '../../data/site'
-import { fileToDataUrl, filesToDataUrls } from '../../lib/imageUpload'
+import { fileToObjectUrl, type PreparedImage } from '../../lib/imageUpload'
 import { mapSaveError, scrollToFirstError } from '../../lib/formErrors'
-import { slugifyId } from '../../lib/listingsStorage'
+import { FEATURED_SLOT_LIMIT, slugifyId } from '../../lib/listingsStorage'
 import type { Listing, ListingDetails, PropertyStatus, PropertyType } from '../../types'
 import './Admin.css'
 
 const NEW_MAIN_AREA = '__new__'
+/** Landscape frame matched to listing cards. */
+const LISTING_CROP_ASPECT = 3 / 2
 
 type FormState = {
   title: string
@@ -21,7 +24,9 @@ type FormState = {
   priceLabel: string
   priceValue: string
   image: string
+  thumbnail: string
   gallery: string[]
+  galleryThumbs: string[]
   beds: string
   baths: string
   sizeLabel: string
@@ -29,8 +34,6 @@ type FormState = {
   featured: boolean
   replaceFeaturedId: string
   includeDetails: boolean
-  detailBeds: string
-  detailBaths: string
   floors: string
   yearBuilt: string
   parking: string
@@ -45,6 +48,13 @@ type FormState = {
   notes: string
 }
 
+type CropSession = {
+  target: 'cover' | 'gallery'
+  file: File
+  src: string
+  queue: File[]
+}
+
 const emptyForm = (defaultMainArea = ''): FormState => ({
   title: '',
   location: '',
@@ -55,7 +65,9 @@ const emptyForm = (defaultMainArea = ''): FormState => ({
   priceLabel: '',
   priceValue: '',
   image: '',
+  thumbnail: '',
   gallery: [],
+  galleryThumbs: [],
   beds: '',
   baths: '',
   sizeLabel: '',
@@ -63,8 +75,6 @@ const emptyForm = (defaultMainArea = ''): FormState => ({
   featured: false,
   replaceFeaturedId: '',
   includeDetails: false,
-  detailBeds: '',
-  detailBaths: '',
   floors: '',
   yearBuilt: '',
   parking: '',
@@ -79,7 +89,7 @@ const emptyForm = (defaultMainArea = ''): FormState => ({
   notes: '',
 })
 
-function listingToForm(listing: Listing): FormState {
+function listingToForm(listing: Listing, inFeaturedOrder = false): FormState {
   const d = listing.details
   return {
     title: listing.title,
@@ -91,16 +101,18 @@ function listingToForm(listing: Listing): FormState {
     priceLabel: listing.priceLabel,
     priceValue: String(listing.priceValue),
     image: listing.image,
+    thumbnail: listing.thumbnail ?? '',
     gallery: [...(listing.images ?? [])],
+    galleryThumbs: (listing.images ?? []).map(
+      (src, i) => listing.imageThumbnails?.[i] || src,
+    ),
     beds: listing.beds != null ? String(listing.beds) : '',
     baths: listing.baths != null ? String(listing.baths) : '',
     sizeLabel: listing.sizeLabel,
     description: listing.description,
-    featured: Boolean(listing.featured),
+    featured: Boolean(listing.featured) || inFeaturedOrder,
     replaceFeaturedId: '',
     includeDetails: Boolean(listing.details),
-    detailBeds: d?.beds != null ? String(d.beds) : '',
-    detailBaths: d?.baths != null ? String(d.baths) : '',
     floors: d?.floors != null ? String(d.floors) : '',
     yearBuilt: d?.yearBuilt != null ? String(d.yearBuilt) : '',
     parking: d?.parking ?? '',
@@ -135,8 +147,6 @@ function buildDetails(form: FormState): ListingDetails | undefined {
   if (!form.includeDetails) return undefined
 
   const details: ListingDetails = {
-    beds: parseOptionalNumber(form.detailBeds),
-    baths: parseOptionalNumber(form.detailBaths),
     floors: parseOptionalNumber(form.floors),
     yearBuilt: parseOptionalNumber(form.yearBuilt),
     parking: form.parking.trim() || undefined,
@@ -178,7 +188,9 @@ function buildListingPayload(form: FormState, locationKey: string): Omit<Listing
     priceLabel: form.priceLabel.trim(),
     priceValue: Number(form.priceValue),
     image: form.image.trim(),
+    thumbnail: form.thumbnail.trim() || undefined,
     images: form.gallery.length ? form.gallery : undefined,
+    imageThumbnails: form.galleryThumbs.length ? form.galleryThumbs : undefined,
     beds: parseOptionalNumber(form.beds),
     baths: parseOptionalNumber(form.baths),
     sizeLabel: form.sizeLabel.trim(),
@@ -278,21 +290,37 @@ function ListingEditor({
   listing?: Listing
 }) {
   const navigate = useNavigate()
-  const { addListing, updateListing, mainAreas, featuredListings } = useListings()
+  const { addListing, updateListing, selectableMainAreas, featuredListings } = useListings()
+  const inFeaturedOrder = Boolean(
+    listing && featuredListings.some((item) => item.id === listing.id),
+  )
   const [form, setForm] = useState<FormState>(() =>
-    listing ? listingToForm(listing) : emptyForm(mainAreas[0]?.value ?? ''),
+    listing
+      ? listingToForm(listing, inFeaturedOrder)
+      : emptyForm(selectableMainAreas[0]?.value ?? ''),
   )
   const [errors, setErrors] = useState<Errors>({})
-  const [savedFlash, setSavedFlash] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState<'cover' | 'gallery' | null>(null)
+  const [cropSession, setCropSession] = useState<CropSession | null>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
 
-  const wasAlreadyFeatured = Boolean(listing?.featured)
+  // Freeze once true so realtime updates after save don't thrash the UI.
+  const [wasAlreadyFeatured, setWasAlreadyFeatured] = useState(
+    () => Boolean(listing?.featured) || inFeaturedOrder,
+  )
+
+  useEffect(() => {
+    if (!inFeaturedOrder) return
+    setWasAlreadyFeatured(true)
+    setForm((prev) => (prev.featured ? prev : { ...prev, featured: true }))
+  }, [inFeaturedOrder])
+
   const replaceCandidates = featuredListings.filter((l) => l.id !== listing?.id)
+  const slotsInUse = featuredListings.length
+  const featuredSlotsFull = replaceCandidates.length >= FEATURED_SLOT_LIMIT
   const needsFeaturedReplace =
-    form.featured && !wasAlreadyFeatured && replaceCandidates.length > 0
+    form.featured && !wasAlreadyFeatured && featuredSlotsFull
 
   const set =
     (key: keyof FormState) =>
@@ -313,7 +341,7 @@ function ListingEditor({
       setForm((prev) => ({ ...prev, locationKey: NEW_MAIN_AREA }))
       return
     }
-    const match = mainAreas.find((l) => l.value === key)
+    const match = selectableMainAreas.find((l) => l.value === key)
     setForm((prev) => ({
       ...prev,
       locationKey: key,
@@ -323,61 +351,96 @@ function ListingEditor({
     }))
   }
 
-  const onCoverChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    setUploading('cover')
-    setErrors((prev) => ({ ...prev, image: undefined, upload: undefined }))
+  const beginCrop = (target: 'cover' | 'gallery', files: File[]) => {
+    if (!files.length) return
+    const [file, ...rest] = files
+    setErrors((prev) => ({ ...prev, image: undefined, upload: undefined, gallery: undefined }))
     try {
-      const dataUrl = await fileToDataUrl(file)
-      setForm((prev) => ({ ...prev, image: dataUrl }))
+      const src = fileToObjectUrl(file)
+      setCropSession({ target, file, src, queue: rest })
     } catch (err) {
-      const mapped = mapSaveError(err)
       const next: Errors = {
-        image: mapped.image ?? (err instanceof Error ? err.message : 'Could not upload cover photo'),
-        upload: mapped.upload,
+        upload: err instanceof Error ? err.message : 'Could not open image',
       }
       setErrors((prev) => ({ ...prev, ...next }))
       scrollToListingErrors(next)
-    } finally {
-      setUploading(null)
     }
   }
 
-  const onGalleryChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    e.target.value = ''
-    if (!files?.length) return
-    setUploading('gallery')
-    setErrors((prev) => ({ ...prev, upload: undefined }))
+  const closeCropSession = () => {
+    setCropSession((prev) => {
+      if (prev?.src) URL.revokeObjectURL(prev.src)
+      return null
+    })
+  }
+
+  const advanceCropQueue = (session: CropSession) => {
+    URL.revokeObjectURL(session.src)
+    if (!session.queue.length) {
+      setCropSession(null)
+      return
+    }
+    const [file, ...rest] = session.queue
     try {
-      const urls = await filesToDataUrls(files)
-      setForm((prev) => ({ ...prev, gallery: [...prev.gallery, ...urls] }))
+      setCropSession({
+        target: session.target,
+        file,
+        src: fileToObjectUrl(file),
+        queue: rest,
+      })
     } catch (err) {
-      const mapped = mapSaveError(err)
+      setCropSession(null)
       const next: Errors = {
-        upload:
-          mapped.upload ??
-          mapped.image ??
-          (err instanceof Error ? err.message : 'Could not upload photos'),
+        upload: err instanceof Error ? err.message : 'Could not open image',
       }
       setErrors((prev) => ({ ...prev, ...next }))
       scrollToListingErrors(next)
-    } finally {
-      setUploading(null)
     }
+  }
+
+  const onCropConfirm = (prepared: PreparedImage) => {
+    if (!cropSession) return
+    if (cropSession.target === 'cover') {
+      setForm((prev) => ({
+        ...prev,
+        image: prepared.original,
+        thumbnail: prepared.thumbnail,
+      }))
+      closeCropSession()
+      return
+    }
+    setForm((prev) => ({
+      ...prev,
+      gallery: [...prev.gallery, prepared.original],
+      galleryThumbs: [...prev.galleryThumbs, prepared.thumbnail],
+    }))
+    advanceCropQueue(cropSession)
+  }
+
+  const onCoverChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    beginCrop('cover', [file])
+  }
+
+  const onGalleryChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    if (!files.length) return
+    beginCrop('gallery', files)
   }
 
   const removeGalleryImage = (index: number) => {
     setForm((prev) => ({
       ...prev,
       gallery: prev.gallery.filter((_, i) => i !== index),
+      galleryThumbs: prev.galleryThumbs.filter((_, i) => i !== index),
     }))
   }
 
   const clearCover = () => {
-    setForm((prev) => ({ ...prev, image: '' }))
+    setForm((prev) => ({ ...prev, image: '', thumbnail: '' }))
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -393,7 +456,7 @@ function ListingEditor({
     const mainAreaLabel =
       form.locationKey === NEW_MAIN_AREA
         ? resolved.mainAreaLabel
-        : mainAreas.find((a) => a.value === resolved.locationKey)?.label ||
+        : selectableMainAreas.find((a) => a.value === resolved.locationKey)?.label ||
           form.location.trim()
 
     const payload = buildListingPayload(form, resolved.locationKey)
@@ -403,16 +466,14 @@ function ListingEditor({
     }
 
     setSaving(true)
+    setErrors({})
     try {
       if (mode === 'edit' && listing) {
         await updateListing(listing.id, { ...payload, id: listing.id }, writeOptions)
-        setSavedFlash(true)
-        window.setTimeout(() => {
-          navigate('/admin', { state: { notice: 'Changes saved' } })
-        }, 700)
+        navigate('/admin', { state: { notice: 'Changes saved' }, replace: true })
       } else {
         await addListing(payload, writeOptions)
-        navigate('/admin', { state: { notice: 'Listing created' } })
+        navigate('/admin', { state: { notice: 'Listing created' }, replace: true })
       }
     } catch (err) {
       const mapped = mapSaveError(err)
@@ -420,7 +481,6 @@ function ListingEditor({
       if (!Object.keys(next).length) next.form = 'Could not save listing'
       setErrors(next)
       scrollToListingErrors(next)
-    } finally {
       setSaving(false)
     }
   }
@@ -438,7 +498,6 @@ function ListingEditor({
             automatically when you save.
           </p>
         </div>
-        {savedFlash ? <p className="admin-saved">Changes saved</p> : null}
       </header>
 
       <form className="admin-form" onSubmit={onSubmit} noValidate>
@@ -462,13 +521,15 @@ function ListingEditor({
             </div>
 
             <div className="field">
-              <label htmlFor="mainArea">Main area</label>
+              <label htmlFor="mainArea">
+                Main area <span className="admin-label-note">(Shown in filters only)</span>
+              </label>
               <select
                 id="mainArea"
                 value={form.locationKey}
                 onChange={(e) => onMainAreaChange(e.target.value)}
               >
-                {mainAreas.map((loc) => (
+                {selectableMainAreas.map((loc) => (
                   <option key={loc.value} value={loc.value}>
                     {loc.label}
                   </option>
@@ -571,7 +632,8 @@ function ListingEditor({
         <section className="admin-panel">
           <h2>Photos</h2>
           <p className="admin-hint">
-            Upload from your device. Cover is required; additional photos are optional.
+            Select a photo to preview and crop the card frame. The full original is kept for the
+            detail page and lightbox.
           </p>
 
           <div className="admin-upload-block" id="field-image" tabIndex={-1}>
@@ -595,14 +657,18 @@ function ListingEditor({
 
             {form.image ? (
               <div className="admin-cover-preview">
-                <img src={form.image} alt="Cover preview" />
+                <img
+                  src={form.thumbnail || form.image}
+                  alt="Cover card preview"
+                />
+                <p className="admin-cover-caption">Card preview · detail page uses the full photo</p>
                 <button
                   type="button"
                   className="btn-outline admin-upload-replace"
                   onClick={() => coverInputRef.current?.click()}
-                  disabled={uploading === 'cover'}
+                  disabled={cropSession != null}
                 >
-                  {uploading === 'cover' ? 'Uploading…' : 'Replace photo'}
+                  Replace photo
                 </button>
               </div>
             ) : (
@@ -610,10 +676,10 @@ function ListingEditor({
                 type="button"
                 className="admin-dropzone"
                 onClick={() => coverInputRef.current?.click()}
-                disabled={uploading === 'cover'}
+                disabled={cropSession != null}
               >
-                <strong>{uploading === 'cover' ? 'Uploading…' : 'Upload cover photo'}</strong>
-                <span>JPG, PNG, or WebP from your device</span>
+                <strong>Upload cover photo</strong>
+                <span>JPG, PNG, or WebP — crop after selecting</span>
               </button>
             )}
             <FieldError message={errors.image} />
@@ -643,7 +709,10 @@ function ListingEditor({
               <div className="admin-photo-preview" aria-label="Gallery preview">
                 {form.gallery.map((src, index) => (
                   <div key={`${index}-${src.slice(0, 48)}`} className="admin-photo-tile">
-                    <img src={src} alt={`Gallery ${index + 1}`} />
+                    <img
+                      src={form.galleryThumbs[index] || src}
+                      alt={`Gallery ${index + 1}`}
+                    />
                     <button
                       type="button"
                       className="admin-photo-remove"
@@ -661,20 +730,16 @@ function ListingEditor({
               type="button"
               className="admin-dropzone admin-dropzone-sm"
               onClick={() => galleryInputRef.current?.click()}
-              disabled={uploading === 'gallery'}
+              disabled={cropSession != null}
             >
               <strong>
-                {uploading === 'gallery'
-                  ? 'Uploading…'
-                  : form.gallery.length
-                    ? 'Add more photos'
-                    : 'Upload additional photos'}
+                {form.gallery.length ? 'Add more photos' : 'Upload additional photos'}
               </strong>
-              <span>You can select multiple files at once</span>
+              <span>Select multiple — each opens the crop editor</span>
             </button>
           </div>
 
-          <FieldError message={errors.upload} />
+          <FieldError message={errors.upload ?? errors.gallery} />
         </section>
 
         <section className="admin-panel">
@@ -731,6 +796,13 @@ function ListingEditor({
               <span>Featured on the home page</span>
             </label>
 
+            {form.featured && !wasAlreadyFeatured && !featuredSlotsFull ? (
+              <p className="admin-hint admin-span-2" style={{ marginTop: 0 }}>
+                {slotsInUse} of {FEATURED_SLOT_LIMIT} homepage featured slots in use. This listing
+                will fill an open slot.
+              </p>
+            ) : null}
+
             {needsFeaturedReplace ? (
               <div className="field admin-span-2">
                 <label htmlFor="replaceFeatured">Replace which featured listing?</label>
@@ -748,8 +820,8 @@ function ListingEditor({
                 </select>
                 <FieldError message={errors.replaceFeaturedId} />
                 <p className="admin-hint" style={{ marginTop: '0.45rem', marginBottom: 0 }}>
-                  This listing will take that slot on the homepage. The previous one stays in All
-                  Listings but is no longer featured.
+                  All {FEATURED_SLOT_LIMIT} homepage featured slots are full. Choose which listing to
+                  replace. The previous one stays in All Listings but is no longer featured.
                 </p>
               </div>
             ) : null}
@@ -780,22 +852,6 @@ function ListingEditor({
 
           {form.includeDetails ? (
             <div className="admin-fields">
-              <div className="field">
-                <label htmlFor="detailBeds">Beds</label>
-                <input
-                  id="detailBeds"
-                  value={form.detailBeds}
-                  onChange={(e) => set('detailBeds')(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="detailBaths">Baths</label>
-                <input
-                  id="detailBaths"
-                  value={form.detailBaths}
-                  onChange={(e) => set('detailBaths')(e.target.value)}
-                />
-              </div>
               <div className="field">
                 <label htmlFor="floors">Floors</label>
                 <input
@@ -903,7 +959,7 @@ function ListingEditor({
           <Button variant="outline" to="/admin">
             Cancel
           </Button>
-          <Button type="submit" disabled={saving || uploading != null}>
+          <Button type="submit" disabled={saving || cropSession != null}>
             {saving
               ? 'Saving…'
               : mode === 'create'
@@ -912,6 +968,17 @@ function ListingEditor({
           </Button>
         </div>
       </form>
+
+      <ImageCropModal
+        open={cropSession != null}
+        file={cropSession?.file ?? null}
+        src={cropSession?.src ?? null}
+        title={cropSession?.target === 'gallery' ? 'Adjust gallery photo' : 'Adjust cover photo'}
+        aspect={LISTING_CROP_ASPECT}
+        aspectLabel="3:2 card frame"
+        onCancel={closeCropSession}
+        onConfirm={onCropConfirm}
+      />
     </div>
   )
 }

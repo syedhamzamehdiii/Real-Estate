@@ -10,8 +10,9 @@ const frontendModules = path.resolve(root, 'node_modules')
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    // Backend client code lives outside Frontend/; force its deps to Frontend/node_modules
-    // so Vercel (Root Directory = Frontend) can bundle without Backend/node_modules.
+    // Critical: one Firebase copy only. Duplicate SDKs → Auth on instance A,
+    // Storage/Firestore on instance B without auth → "Missing or insufficient permissions".
+    dedupe: ['firebase', 'zod'],
     alias: [
       {
         find: '@estate-line/backend/client',
@@ -27,14 +28,13 @@ export default defineConfig({
       },
       {
         find: /^firebase\/(.+)$/,
-        replacement: path.resolve(frontendModules, 'firebase/$1'),
+        replacement: `${path.resolve(frontendModules, 'firebase')}/$1`,
       },
       {
         find: /^zod$/,
         replacement: path.resolve(frontendModules, 'zod'),
       },
     ],
-    dedupe: ['firebase', 'zod'],
   },
   server: {
     fs: {
@@ -42,6 +42,12 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/storage', 'zod'],
+    include: [
+      'firebase/app',
+      'firebase/auth',
+      'firebase/firestore',
+      'firebase/storage',
+      'zod',
+    ],
   },
 })

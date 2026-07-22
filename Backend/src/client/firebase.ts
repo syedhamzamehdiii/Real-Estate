@@ -1,4 +1,4 @@
-import { initializeApp, getApps, type FirebaseApp, type FirebaseOptions } from 'firebase/app'
+import { initializeApp, getApp, getApps, type FirebaseApp, type FirebaseOptions } from 'firebase/app'
 import { getAuth, type Auth } from 'firebase/auth'
 import { getFirestore, type Firestore } from 'firebase/firestore'
 import { getStorage, type FirebaseStorage } from 'firebase/storage'
@@ -12,10 +12,7 @@ export type EstateFirebaseConfig = FirebaseOptions & {
   appId: string
 }
 
-let app: FirebaseApp | null = null
-let auth: Auth | null = null
-let db: Firestore | null = null
-let storage: FirebaseStorage | null = null
+let configuredBucket: string | null = null
 
 export function isFirebaseConfigComplete(
   config: Partial<EstateFirebaseConfig> | null | undefined,
@@ -38,35 +35,45 @@ export function initFirebase(config: EstateFirebaseConfig): {
   db: Firestore
   storage: FirebaseStorage
 } {
-  if (!app) {
-    app = getApps().length ? getApps()[0]! : initializeApp(config)
-    auth = getAuth(app)
-    db = getFirestore(app)
-    storage = getStorage(app)
+  configuredBucket = config.storageBucket
+  const app = getApps().length ? getApp() : initializeApp(config)
+  return {
+    app,
+    auth: getAuth(app),
+    db: getFirestore(app),
+    storage: getStorage(app, `gs://${config.storageBucket}`),
   }
-  return { app, auth: auth!, db: db!, storage: storage! }
+}
+
+function requireApp(): FirebaseApp {
+  if (!getApps().length) {
+    throw new Error('Firebase not initialized. Call initFirebase() first.')
+  }
+  return getApp()
 }
 
 export function getFirebaseApp(): FirebaseApp {
-  if (!app) throw new Error('Firebase not initialized. Call initFirebase() first.')
-  return app
+  return requireApp()
 }
 
+/** Always resolve from the shared app — avoids stale module singletons under Vite HMR. */
 export function getFirebaseAuth(): Auth {
-  if (!auth) throw new Error('Firebase Auth not initialized. Call initFirebase() first.')
-  return auth
+  return getAuth(requireApp())
 }
 
 export function getDb(): Firestore {
-  if (!db) throw new Error('Firestore not initialized. Call initFirebase() first.')
-  return db
+  return getFirestore(requireApp())
 }
 
 export function getFirebaseStorage(): FirebaseStorage {
-  if (!storage) throw new Error('Storage not initialized. Call initFirebase() first.')
-  return storage
+  const app = requireApp()
+  const bucket = configuredBucket || (app.options.storageBucket as string | undefined)
+  if (!bucket) {
+    throw new Error('Firebase Storage bucket is not configured.')
+  }
+  return getStorage(app, `gs://${bucket}`)
 }
 
 export function isFirebaseInitialized(): boolean {
-  return app != null
+  return getApps().length > 0
 }

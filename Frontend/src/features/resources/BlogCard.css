@@ -27,8 +27,20 @@
 }
 
 .blog-img {
-  height: 180px;
+  aspect-ratio: 3 / 2;
+  height: auto;
   overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  width: 100%;
+  display: block;
+  text-align: left;
+}
+
+.blog-img-button {
+  cursor: zoom-in;
 }
 
 .blog-img img {
@@ -36,6 +48,7 @@
   height: 100%;
   object-fit: cover;
   transition: transform 0.7s var(--ease);
+  pointer-events: none;
 }
 
 .blog-card:hover .blog-img img {
@@ -47,6 +60,8 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  color: inherit;
+  text-decoration: none;
 }
 
 .blog-cat {

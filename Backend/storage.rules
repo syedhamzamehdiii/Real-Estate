@@ -5,10 +5,12 @@ rules_version = '2';
  *
  * Layout:
  *   listings/{listingId}/cover.jpg
+ *   listings/{listingId}/cover-thumb.jpg
  *   listings/{listingId}/gallery/{fileName}
  *   resources/{resourceId}/cover.jpg
+ *   resources/{resourceId}/cover-thumb.jpg
  *
- * Public read (CDN download URLs). Authenticated admins may upload/replace/delete.
+ * Public read. Any signed-in admin may upload/replace/delete under these paths.
  */
 service firebase.storage {
   match /b/{bucket}/o {
@@ -16,36 +18,39 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function isImage() {
-      return request.resource != null
-        && request.resource.contentType.matches('image/.*');
-    }
-
-    function underSizeLimit() {
-      // 8 MiB after client-side compression
-      return request.resource.size < 8 * 1024 * 1024;
-    }
-
-    function validImageUpload() {
-      return isSignedIn() && isImage() && underSizeLimit();
+    function underLimit() {
+      return request.resource.size < 12 * 1024 * 1024;
     }
 
     match /listings/{listingId}/cover.jpg {
       allow read: if true;
-      allow write: if validImageUpload();
+      allow create, update: if isSignedIn() && underLimit();
+      allow delete: if isSignedIn();
+    }
+
+    match /listings/{listingId}/cover-thumb.jpg {
+      allow read: if true;
+      allow create, update: if isSignedIn() && underLimit();
       allow delete: if isSignedIn();
     }
 
     match /listings/{listingId}/gallery/{fileName} {
       allow read: if true;
-      allow write: if validImageUpload()
+      allow create, update: if isSignedIn()
+        && underLimit()
         && fileName.matches('^[a-zA-Z0-9._-]{1,120}$');
       allow delete: if isSignedIn();
     }
 
     match /resources/{resourceId}/cover.jpg {
       allow read: if true;
-      allow write: if validImageUpload();
+      allow create, update: if isSignedIn() && underLimit();
+      allow delete: if isSignedIn();
+    }
+
+    match /resources/{resourceId}/cover-thumb.jpg {
+      allow read: if true;
+      allow create, update: if isSignedIn() && underLimit();
       allow delete: if isSignedIn();
     }
 

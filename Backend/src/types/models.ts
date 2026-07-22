@@ -31,7 +31,9 @@ export interface Listing {
   priceLabel: string
   priceValue: number
   image: string
+  thumbnail?: string
   images?: string[]
+  imageThumbnails?: string[]
   beds?: number
   baths?: number
   sizeLabel: string
@@ -57,6 +59,7 @@ export interface BlogPost {
   excerpt: string
   content: string
   image: string
+  thumbnail?: string
   author: string
   readMinutes: number
   publishedAt: string

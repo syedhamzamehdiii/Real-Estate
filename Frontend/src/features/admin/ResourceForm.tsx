@@ -1,12 +1,15 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui'
+import { ImageCropModal } from '../../components/media/ImageCropModal'
 import { useResources } from '../../context/ResourcesContext'
-import { fileToDataUrl } from '../../lib/imageUpload'
+import { fileToObjectUrl, type PreparedImage } from '../../lib/imageUpload'
 import { mapSaveError, scrollToFirstError } from '../../lib/formErrors'
-import { finalizeSlug, sanitizeSlugInput, slugifyResource } from '../../lib/resourcesStorage'
+import { finalizeSlug, sanitizeSlugInput, slugifyResource, FEATURED_RESOURCE_LIMIT } from '../../lib/resourcesStorage'
 import type { BlogPost } from '../../types'
 import './Admin.css'
+
+const RESOURCE_CROP_ASPECT = 3 / 2
 
 type FormState = {
   title: string
@@ -15,12 +18,18 @@ type FormState = {
   excerpt: string
   content: string
   image: string
+  thumbnail: string
   author: string
   readMinutes: string
   publishedAt: string
   featured: boolean
   replaceFeaturedId: string
   slugTouched: boolean
+}
+
+type CropSession = {
+  file: File
+  src: string
 }
 
 function todayIsoDate() {
@@ -34,6 +43,7 @@ const emptyForm = (): FormState => ({
   excerpt: '',
   content: '',
   image: '',
+  thumbnail: '',
   author: 'Estate Line Research',
   readMinutes: '5',
   publishedAt: todayIsoDate(),
@@ -50,6 +60,7 @@ function postToForm(post: BlogPost): FormState {
     excerpt: post.excerpt,
     content: post.content,
     image: post.image,
+    thumbnail: post.thumbnail ?? '',
     author: post.author,
     readMinutes: String(post.readMinutes),
     publishedAt: post.publishedAt,
@@ -67,6 +78,7 @@ function buildPayload(form: FormState): Omit<BlogPost, 'id'> {
     excerpt: form.excerpt.trim(),
     content: form.content.trim(),
     image: form.image.trim(),
+    thumbnail: form.thumbnail.trim() || undefined,
     author: form.author.trim(),
     readMinutes: Math.max(1, Math.round(Number(form.readMinutes)) || 1),
     publishedAt: form.publishedAt || todayIsoDate(),
@@ -163,15 +175,16 @@ function ResourceEditor({
     post ? postToForm(post) : emptyForm(),
   )
   const [errors, setErrors] = useState<Errors>({})
-  const [savedFlash, setSavedFlash] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [cropSession, setCropSession] = useState<CropSession | null>(null)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
-  const wasAlreadyFeatured = Boolean(post?.featured)
+  const [wasAlreadyFeatured] = useState(() => Boolean(post?.featured))
   const replaceCandidates = featuredPosts.filter((p) => p.id !== post?.id)
+  const slotsInUse = featuredPosts.length
+  const featuredSlotsFull = replaceCandidates.length >= FEATURED_RESOURCE_LIMIT
   const needsFeaturedReplace =
-    form.featured && !wasAlreadyFeatured && replaceCandidates.length > 0
+    form.featured && !wasAlreadyFeatured && featuredSlotsFull
 
   const set =
     (key: keyof FormState) =>
@@ -210,29 +223,39 @@ function ResourceEditor({
     }))
   }
 
-  const onCoverChange = async (e: ChangeEvent<HTMLInputElement>) => {
+  const onCoverChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setUploading(true)
     setErrors((prev) => ({ ...prev, image: undefined, upload: undefined }))
     try {
-      const dataUrl = await fileToDataUrl(file)
-      setForm((prev) => ({ ...prev, image: dataUrl }))
+      setCropSession({ file, src: fileToObjectUrl(file) })
     } catch (err) {
-      const mapped = mapSaveError(err)
       const next: Errors = {
-        image: mapped.image ?? (err instanceof Error ? err.message : 'Could not upload cover photo'),
-        upload: mapped.upload,
+        image: err instanceof Error ? err.message : 'Could not open image',
       }
       setErrors((prev) => ({ ...prev, ...next }))
       scrollToResourceErrors(next)
-    } finally {
-      setUploading(false)
     }
   }
 
-  const clearCover = () => setForm((prev) => ({ ...prev, image: '' }))
+  const closeCropSession = () => {
+    setCropSession((prev) => {
+      if (prev?.src) URL.revokeObjectURL(prev.src)
+      return null
+    })
+  }
+
+  const onCropConfirm = (prepared: PreparedImage) => {
+    setForm((prev) => ({
+      ...prev,
+      image: prepared.original,
+      thumbnail: prepared.thumbnail,
+    }))
+    closeCropSession()
+  }
+
+  const clearCover = () => setForm((prev) => ({ ...prev, image: '', thumbnail: '' }))
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -249,16 +272,14 @@ function ResourceEditor({
     }
 
     setSaving(true)
+    setErrors({})
     try {
       if (mode === 'edit' && post) {
         await updatePost(post.id, { ...payload, id: post.id }, writeOptions)
-        setSavedFlash(true)
-        window.setTimeout(() => {
-          navigate('/admin/resources', { state: { notice: 'Changes saved' } })
-        }, 700)
+        navigate('/admin/resources', { state: { notice: 'Changes saved' }, replace: true })
       } else {
         await addPost(payload, writeOptions)
-        navigate('/admin/resources', { state: { notice: 'Resource created' } })
+        navigate('/admin/resources', { state: { notice: 'Resource created' }, replace: true })
       }
     } catch (err) {
       const mapped = mapSaveError(err)
@@ -266,7 +287,6 @@ function ResourceEditor({
       if (!Object.keys(next).length) next.form = 'Could not save resource'
       setErrors(next)
       scrollToResourceErrors(next)
-    } finally {
       setSaving(false)
     }
   }
@@ -283,7 +303,6 @@ function ResourceEditor({
             Fields match the public article template — title, category, excerpt, and full content.
           </p>
         </div>
-        {savedFlash ? <p className="admin-saved">Changes saved</p> : null}
       </header>
 
       <form className="admin-form" onSubmit={onSubmit} noValidate>
@@ -375,7 +394,10 @@ function ResourceEditor({
 
         <section className="admin-panel" id="field-image" tabIndex={-1}>
           <h2>Cover photo</h2>
-          <p className="admin-hint">Upload from your device. Shown on cards and the article hero.</p>
+          <p className="admin-hint">
+            Select a photo to preview and crop the card frame. The full original is kept for the
+            article view.
+          </p>
 
           <input
             ref={coverInputRef}
@@ -388,17 +410,22 @@ function ResourceEditor({
 
           {form.image ? (
             <div className="admin-cover-preview">
-              <img src={form.image} alt="Cover preview" />
+              <img src={form.thumbnail || form.image} alt="Cover card preview" />
+              <p className="admin-cover-caption">Card preview · article uses the full photo</p>
               <div className="admin-cover-actions">
                 <button
                   type="button"
                   className="btn-outline admin-upload-replace"
                   onClick={() => coverInputRef.current?.click()}
-                  disabled={uploading}
+                  disabled={cropSession != null}
                 >
-                  {uploading ? 'Uploading…' : 'Replace photo'}
+                  Replace photo
                 </button>
-                <button type="button" className="admin-upload-text-btn admin-cover-remove" onClick={clearCover}>
+                <button
+                  type="button"
+                  className="admin-upload-text-btn admin-cover-remove"
+                  onClick={clearCover}
+                >
                   Remove
                 </button>
               </div>
@@ -408,10 +435,10 @@ function ResourceEditor({
               type="button"
               className="admin-dropzone"
               onClick={() => coverInputRef.current?.click()}
-              disabled={uploading}
+              disabled={cropSession != null}
             >
-              <strong>{uploading ? 'Uploading…' : 'Upload cover photo'}</strong>
-              <span>JPG, PNG, or WebP from your device</span>
+              <strong>Upload cover photo</strong>
+              <span>JPG, PNG, or WebP — crop after selecting</span>
             </button>
           )}
           <FieldError message={errors.image || errors.upload} />
@@ -457,6 +484,13 @@ function ResourceEditor({
               <span>Featured on the home page</span>
             </label>
 
+            {form.featured && !wasAlreadyFeatured && !featuredSlotsFull ? (
+              <p className="admin-hint admin-span-2" style={{ marginTop: 0 }}>
+                {slotsInUse} of {FEATURED_RESOURCE_LIMIT} homepage featured slots in use. This
+                article will fill an open slot.
+              </p>
+            ) : null}
+
             {needsFeaturedReplace ? (
               <div className="field admin-span-2">
                 <label htmlFor="replaceFeatured">Replace which homepage resource?</label>
@@ -474,8 +508,8 @@ function ResourceEditor({
                 </select>
                 <FieldError message={errors.replaceFeaturedId} />
                 <p className="admin-hint" style={{ marginTop: '0.45rem', marginBottom: 0 }}>
-                  This article will take that slot in the homepage slider. The previous one stays in
-                  Resources but is no longer featured.
+                  All {FEATURED_RESOURCE_LIMIT} homepage featured slots are full. Choose which article to replace. The
+                  previous one stays in Resources but is no longer featured.
                 </p>
               </div>
             ) : null}
@@ -492,7 +526,7 @@ function ResourceEditor({
           <Button variant="outline" to="/admin/resources">
             Cancel
           </Button>
-          <Button type="submit" disabled={saving || uploading}>
+          <Button type="submit" disabled={saving || cropSession != null}>
             {saving
               ? 'Saving…'
               : mode === 'create'
@@ -501,6 +535,17 @@ function ResourceEditor({
           </Button>
         </div>
       </form>
+
+      <ImageCropModal
+        open={cropSession != null}
+        file={cropSession?.file ?? null}
+        src={cropSession?.src ?? null}
+        title="Adjust cover photo"
+        aspect={RESOURCE_CROP_ASPECT}
+        aspectLabel="3:2 card frame"
+        onCancel={closeCropSession}
+        onConfirm={onCropConfirm}
+      />
     </div>
   )
 }

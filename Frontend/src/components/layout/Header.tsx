@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { NAV_LINKS } from '../../data/site'
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock'
@@ -9,9 +9,22 @@ import './Header.css'
 export function Header() {
   const scrolled = useScrolled()
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const burgerRef = useRef<HTMLButtonElement>(null)
   useBodyScrollLock(menuOpen)
 
   const close = () => setMenuOpen(false)
+
+  // Don't leave focus inside a closed (aria-hidden) menu.
+  useEffect(() => {
+    if (menuOpen) return
+    const menu = menuRef.current
+    const active = document.activeElement
+    if (menu && active instanceof HTMLElement && menu.contains(active)) {
+      active.blur()
+      burgerRef.current?.focus({ preventScroll: true })
+    }
+  }, [menuOpen])
 
   return (
     <>
@@ -44,6 +57,7 @@ export function Header() {
         </div>
 
         <button
+          ref={burgerRef}
           type="button"
           className={`burger ${menuOpen ? 'open' : ''}`}
           aria-label={menuOpen ? 'Close menu' : 'Open menu'}
@@ -58,9 +72,11 @@ export function Header() {
       </header>
 
       <div
+        ref={menuRef}
         id="mobile-menu"
         className={`mobile-menu ${menuOpen ? 'open' : ''}`}
         aria-hidden={!menuOpen}
+        inert={!menuOpen || undefined}
       >
         {NAV_LINKS.map((link) => (
           <NavLink key={link.to} to={link.to} end={link.to === '/'} onClick={close}>

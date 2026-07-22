@@ -28,10 +28,14 @@ export interface Listing {
   status: PropertyStatus
   priceLabel: string
   priceValue: number
-  /** Cover image used on cards and as the first gallery slide. */
+  /** Full-resolution cover for detail pages and lightbox. */
   image: string
-  /** Extra gallery photos (optional). Detail page shows image + these. */
+  /** Cropped cover for listing cards (falls back to `image`). */
+  thumbnail?: string
+  /** Extra gallery photos (optional) — full-resolution originals. */
   images?: string[]
+  /** Cropped gallery frames aligned with `images` (optional). */
+  imageThumbnails?: string[]
   beds?: number
   baths?: number
   sizeLabel: string
@@ -48,7 +52,10 @@ export interface BlogPost {
   title: string
   excerpt: string
   content: string
+  /** Full-resolution cover for article hero / lightbox. */
   image: string
+  /** Cropped cover for resource cards (falls back to `image`). */
+  thumbnail?: string
   author: string
   readMinutes: number
   publishedAt: string

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { TiltCard } from '../../components/ui/TiltCard'
 import { Reveal } from '../../components/ui'
+import { cardImageSrc } from '../../lib/imageUpload'
 import type { Listing } from '../../types'
 import './ListingCard.css'
 
@@ -14,7 +15,7 @@ export function ListingCard({ listing }: ListingCardProps) {
       <TiltCard className="listing-card">
         <Link to={`/listings/${listing.id}`} className="listing-card-link">
           <div className="card-img">
-            <img src={listing.image} alt={listing.title} loading="lazy" />
+            <img src={cardImageSrc(listing)} alt={listing.title} loading="lazy" />
             <span className="badge">{listing.status}</span>
             <span className="price-tag">{listing.priceLabel}</span>
           </div>

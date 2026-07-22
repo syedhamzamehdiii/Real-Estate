@@ -29,7 +29,7 @@ const imageUrlSchema = z
   .string()
   .trim()
   .min(1)
-  .max(2048)
+  .max(4096)
   .refine((value) => /^https?:\/\//i.test(value), {
     message: 'Image must be an HTTP(S) URL after upload',
   })
@@ -56,7 +56,9 @@ export const listingDraftSchema = z
   .object({
     ...listingFieldsBase,
     image: imageSourceSchema,
+    thumbnail: imageSourceSchema.optional(),
     images: z.array(imageSourceSchema).max(MAX_GALLERY_IMAGES).optional(),
+    imageThumbnails: z.array(imageSourceSchema).max(MAX_GALLERY_IMAGES).optional(),
   })
   .strict()
 
@@ -65,7 +67,9 @@ export const listingInputSchema = z
   .object({
     ...listingFieldsBase,
     image: imageUrlSchema,
+    thumbnail: imageUrlSchema.optional(),
     images: z.array(imageUrlSchema).max(MAX_GALLERY_IMAGES).optional(),
+    imageThumbnails: z.array(imageUrlSchema).max(MAX_GALLERY_IMAGES).optional(),
   })
   .strict()
 
