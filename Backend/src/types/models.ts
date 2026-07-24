@@ -108,6 +108,20 @@ export interface InquiryDocument extends ContactFormData {
   createdAt: unknown
 }
 
+export type LeadChannel = 'call' | 'whatsapp'
+
+export interface ContactLeadClick {
+  id: string
+  channel: LeadChannel
+  visitorId: string
+  createdAt: unknown
+}
+
+export interface LeadClickStats {
+  callLeads: number
+  whatsappLeads: number
+}
+
 export interface ListingWriteOptions {
   mainAreaLabel?: string
   replaceFeaturedId?: string

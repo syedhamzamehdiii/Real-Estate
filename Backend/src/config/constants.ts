@@ -4,6 +4,7 @@ export const COLLECTIONS = {
   listings: 'listings',
   resources: 'resources',
   inquiries: 'inquiries',
+  contactLeadClicks: 'contactLeadClicks',
   meta: 'meta',
 } as const
 

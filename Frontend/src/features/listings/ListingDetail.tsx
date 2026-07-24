@@ -5,6 +5,7 @@ import { MediaViewer } from '../../components/media/MediaViewer'
 import { useListings } from '../../context/ListingsContext'
 import { SITE } from '../../data/site'
 import { getListingGallery } from '../../lib/listings'
+import { onCallLeadClick, onWhatsAppLeadClick } from '../../lib/leadTracking'
 import type { ListingDetails } from '../../types'
 import './ListingDetail.css'
 
@@ -229,10 +230,11 @@ export function ListingDetailPage() {
             <Button
               variant="outline"
               href={`https://wa.me/${SITE.whatsapp}?text=${waText}`}
+              onClick={onWhatsAppLeadClick}
             >
               WhatsApp an Agent
             </Button>
-            <a className="detail-phone" href={`tel:${SITE.phone}`}>
+            <a className="detail-phone" href={`tel:${SITE.phone}`} onClick={onCallLeadClick}>
               Or call {SITE.phoneDisplay}
             </a>
           </aside>

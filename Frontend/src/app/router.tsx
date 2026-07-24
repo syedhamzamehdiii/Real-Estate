@@ -5,6 +5,7 @@ import { AdminDashboard } from '../features/admin/AdminDashboard'
 import { AdminLayout } from '../features/admin/AdminLayout'
 import { AdminLoginPage } from '../features/admin/AdminLogin'
 import { AdminResourcesDashboard } from '../features/admin/AdminResourcesDashboard'
+import { AdminResponses } from '../features/admin/AdminResponses'
 import {
   AdminListingCreatePage,
   AdminListingEditPage,
@@ -39,6 +40,7 @@ export function AppRouter() {
         <Route path="resources" element={<AdminResourcesDashboard />} />
         <Route path="resources/new" element={<AdminResourceCreatePage />} />
         <Route path="resources/:id/edit" element={<AdminResourceEditPage />} />
+        <Route path="responses" element={<AdminResponses />} />
       </Route>
 
       <Route element={<AppLayout />}>

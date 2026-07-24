@@ -6,7 +6,8 @@ rules_version = '2';
  * Access model:
  * - Public: read listings, resources, meta
  * - Contact: anyone may create an inquiry
- * - Signed-in admin: write listings/resources/meta; read/update inquiries
+ * - Lead clicks: anyone may create a unique call/WhatsApp click (once per visitor)
+ * - Signed-in admin: write listings/resources/meta; read/update inquiries; read lead clicks
  *
  * Listing/resource field shape is enforced in the Zod client layer.
  * Rules keep auth + basic identity checks so optional media fields
@@ -41,6 +42,16 @@ service cloud.firestore {
         && d.status == 'new'
         && d.createdAt is timestamp
         && !('ownerId' in d);
+    }
+
+    function validLeadClickWrite() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['channel', 'visitorId', 'createdAt'])
+        && (d.channel == 'call' || d.channel == 'whatsapp')
+        && isNonEmptyString(d.visitorId, 80)
+        && d.visitorId.size() >= 8
+        && d.createdAt is timestamp
+        && request.resource.id == d.visitorId + '__' + d.channel;
     }
 
     function validListingsMeta() {
@@ -100,6 +111,12 @@ service cloud.firestore {
     match /inquiries/{inquiryId} {
       allow create: if validInquiryWrite();
       allow read, update, delete: if isSignedIn();
+    }
+
+    match /contactLeadClicks/{clickId} {
+      allow create: if validLeadClickWrite();
+      allow read: if isSignedIn();
+      allow update, delete: if false;
     }
 
     match /{document=**} {

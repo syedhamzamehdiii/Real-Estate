@@ -1,4 +1,5 @@
 import { SITE } from '../../data/site'
+import { onCallLeadClick, onWhatsAppLeadClick } from '../../lib/leadTracking'
 import './FloatingContact.css'
 
 export function FloatingContact() {
@@ -8,6 +9,7 @@ export function FloatingContact() {
         className="fab fab-call"
         href={`tel:${SITE.phone}`}
         aria-label={`Call ${SITE.phoneDisplay}`}
+        onClick={onCallLeadClick}
       >
         <span className="fab-pulse" aria-hidden="true" />
         <PhoneIcon />
@@ -18,6 +20,7 @@ export function FloatingContact() {
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Chat on WhatsApp"
+        onClick={onWhatsAppLeadClick}
       >
         <WhatsAppIcon />
       </a>

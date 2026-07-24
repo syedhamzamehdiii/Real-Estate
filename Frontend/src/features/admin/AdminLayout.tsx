@@ -1,11 +1,13 @@
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { SITE } from '../../data/site'
+import { useLeadClickStats } from './useLeadClickStats'
 import './Admin.css'
 
 export function AdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const leadStats = useLeadClickStats()
 
   const onLogout = () => {
     logout()
@@ -38,6 +40,19 @@ export function AdminLayout() {
               All resources
             </NavLink>
             <NavLink to="/admin/resources/new">Add resource</NavLink>
+          </div>
+
+          <div className="admin-nav-group">
+            <span className="admin-nav-label">Inbox</span>
+            <div className="admin-lead-stats" aria-label="Lead click totals">
+              <p>
+                Total call leads: <strong>{leadStats.callLeads}</strong>
+              </p>
+              <p>
+                Total WhatsApp leads: <strong>{leadStats.whatsappLeads}</strong>
+              </p>
+            </div>
+            <NavLink to="/admin/responses">Responses</NavLink>
           </div>
         </nav>
 

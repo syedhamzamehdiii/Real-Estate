@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
   limit,
@@ -73,4 +74,9 @@ export async function updateInquiryStatus(
 ): Promise<void> {
   requireUid()
   await updateDoc(doc(getDb(), COLLECTIONS.inquiries, id), { status })
+}
+
+export async function deleteInquiry(id: string): Promise<void> {
+  requireUid()
+  await deleteDoc(doc(getDb(), COLLECTIONS.inquiries, id))
 }

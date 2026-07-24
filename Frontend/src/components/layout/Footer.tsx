@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { NAV_LINKS, SITE } from '../../data/site'
+import { onCallLeadClick, onWhatsAppLeadClick } from '../../lib/leadTracking'
 import './Footer.css'
 
 export function Footer() {
@@ -45,6 +46,7 @@ export function Footer() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="WhatsApp"
+              onClick={onWhatsAppLeadClick}
             >
               <WhatsAppIcon />
             </a>
@@ -85,7 +87,9 @@ export function Footer() {
           <ul>
             <li>{SITE.address}</li>
             <li>
-              <a href={`tel:${SITE.phone}`}>{SITE.phoneDisplay}</a>
+              <a href={`tel:${SITE.phone}`} onClick={onCallLeadClick}>
+                {SITE.phoneDisplay}
+              </a>
             </li>
             <li>
               <a href={`mailto:${SITE.email}`}>{SITE.email}</a>

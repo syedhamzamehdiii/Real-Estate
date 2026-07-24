@@ -4,6 +4,7 @@ import { SITE } from '../../data/site'
 import type { ContactFormData } from '../../types'
 import { firebaseReady } from '../../firebase/config'
 import { createInquiry } from '@estate-line/backend/client'
+import { onCallLeadClick, onWhatsAppLeadClick } from '../../lib/leadTracking'
 import './ContactPage.css'
 
 const empty: ContactFormData = {
@@ -46,10 +47,15 @@ export function ContactPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!validate()) return
+    if (!firebaseReady) {
+      setErrors((prev) => ({
+        ...prev,
+        message: 'Could not send your message. Please try again or call us.',
+      }))
+      return
+    }
     try {
-      if (firebaseReady) {
-        await createInquiry(form)
-      }
+      await createInquiry(form)
       setSubmitted(true)
       setForm(empty)
     } catch {
@@ -78,7 +84,10 @@ export function ContactPage() {
                 <h3>Thank you — we received your message.</h3>
                 <p>
                   An agent will contact you shortly. Prefer to talk now? Call{' '}
-                  <a href={`tel:${SITE.phone}`}>{SITE.phoneDisplay}</a> or message us on WhatsApp.
+                  <a href={`tel:${SITE.phone}`} onClick={onCallLeadClick}>
+                    {SITE.phoneDisplay}
+                  </a>{' '}
+                  or message us on WhatsApp.
                 </p>
                 <Button type="button" onClick={() => setSubmitted(false)}>
                   Send another message
@@ -167,7 +176,9 @@ export function ContactPage() {
               <li>
                 <span>Phone</span>
                 <strong>
-                  <a href={`tel:${SITE.phone}`}>{SITE.phoneDisplay}</a>
+                  <a href={`tel:${SITE.phone}`} onClick={onCallLeadClick}>
+                    {SITE.phoneDisplay}
+                  </a>
                 </strong>
               </li>
               <li>
@@ -180,6 +191,7 @@ export function ContactPage() {
             <Button
               variant="outline"
               href={`https://wa.me/${SITE.whatsapp}?text=${encodeURIComponent('Hi Estate Line — I would like to book a visit.')}`}
+              onClick={onWhatsAppLeadClick}
             >
               Chat on WhatsApp
             </Button>

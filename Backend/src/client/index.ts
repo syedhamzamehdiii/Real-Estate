@@ -77,7 +77,14 @@ export {
   listInquiries,
   subscribeInquiries,
   updateInquiryStatus,
+  deleteInquiry,
 } from './inquiries'
+
+export {
+  trackLeadClick,
+  subscribeLeadClickStats,
+  leadClickDocId,
+} from './leads'
 
 export type {
   ListingsMeta,
@@ -88,5 +95,9 @@ export type {
   ResourceWriteOptions,
   ContactFormData,
   InquiryDocument,
+  InquiryStatus,
+  LeadChannel,
+  ContactLeadClick,
+  LeadClickStats,
   MainArea,
 } from '../types/models'
