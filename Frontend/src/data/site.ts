@@ -1,3 +1,6 @@
+const foundedYear = 2001
+const yearsOfExpertise = new Date().getFullYear() - foundedYear
+
 export const SITE = {
   name: 'Estate Line Properties',
   tagline: 'Homes Found at Dusk',
@@ -6,10 +9,22 @@ export const SITE = {
   whatsapp: '923004368166',
   email: 'estatelineproperties@gmail.com',
   address: 'Plaza No 170 CCA1, DHA Phase 6 Lahore, Pakistan',
-  foundedYear: 2014,
+  foundedYear,
+  yearsOfExpertise,
   facebook: 'https://www.facebook.com/share/1Jj6c3Nqk5/',
   instagram: 'https://www.instagram.com/estatelineproperties',
   youtube: 'https://www.youtube.com/@Estatelineproperties',
+  eyebrow: `Trusted Real Estate · Since ${foundedYear}`,
+  heroSub:
+    'Estate Line Properties curates rare listings across the city\'s most desired addresses — guided by local and international expertise and quiet, honest advice from first visit to closing day.',
+  footerBlurb: `Local and international expertise, honest guidance — helping you find home in Lahore's most sought-after neighborhoods since ${foundedYear}.`,
+  aboutTag: 'About Estate Line Properties',
+  aboutTitleLine1: 'Local & international knowledge.',
+  aboutTitleLine2: 'Honest guidance.',
+  aboutDescription: `For over ${yearsOfExpertise} years, we've helped families and investors navigate competitive markets at home and abroad — without the pressure tactics. Every listing on this site is personally verified by our team before it ever reaches you.`,
+  expertiseStatLabel: 'Years of Local & International Expertise',
+  metaDescription:
+    'Estate Line Properties — local and international real estate expertise since 2001. Curated homes and plots across Lahore. Honest guidance from first visit to closing day.',
 } as const
 
 export const NAV_LINKS = [

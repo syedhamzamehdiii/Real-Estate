@@ -14,10 +14,7 @@ export function Footer() {
               <small>Properties</small>
             </span>
           </Link>
-          <p>
-            Local experts, honest guidance — helping you find home in Lahore&apos;s most
-            sought-after neighborhoods since {SITE.foundedYear}.
-          </p>
+          <p>{SITE.footerBlurb}</p>
           <div className="social">
             <a
               href={SITE.facebook}

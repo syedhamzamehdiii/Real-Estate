@@ -77,7 +77,7 @@ export function AdminLoginPage() {
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@estatelineproperties.com"
+              placeholder="estatelineproperties@gmail.com"
               disabled={submitting}
             />
           </div>

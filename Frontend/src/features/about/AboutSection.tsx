@@ -1,4 +1,5 @@
 import { Button, Reveal, SectionHead } from '../../components/ui'
+import { SITE } from '../../data/site'
 import './AboutSection.css'
 
 const POINTS = [
@@ -30,15 +31,15 @@ export function AboutSection() {
 
         <Reveal className="about-copy">
           <SectionHead
-            tag="About Estate Line Properties"
+            tag={SITE.aboutTag}
             title={
               <>
-                Local knowledge.
+                {SITE.aboutTitleLine1}
                 <br />
-                Honest guidance.
+                {SITE.aboutTitleLine2}
               </>
             }
-            description="For over a decade, we've helped families and investors navigate one of the city's most competitive markets — without the pressure tactics. Every listing on this site is personally verified by our team before it ever reaches you."
+            description={SITE.aboutDescription}
           />
           <ul className="about-list">
             {POINTS.map((point) => (

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Button } from '../../components/ui'
+import { SITE } from '../../data/site'
 import { SearchPanel } from './SearchPanel'
 import './Hero.css'
 
@@ -55,18 +56,14 @@ export function Hero() {
       </svg>
 
       <div className="hero-content">
-        <p className="brand-mark">Estate Line Properties</p>
-        <div className="eyebrow">Trusted Real Estate · Since 2014</div>
+        <p className="brand-mark">{SITE.name}</p>
+        <div className="eyebrow">{SITE.eyebrow}</div>
         <h1 className="hero-title">
           Find your home
           <br />
           in the last light of <em>dusk.</em>
         </h1>
-        <p className="hero-sub">
-          Estate Line Properties curates rare listings across the city&apos;s most desired
-          addresses — guided by local expertise and quiet, honest advice from first visit to
-          closing day.
-        </p>
+        <p className="hero-sub">{SITE.heroSub}</p>
         <div className="hero-actions">
           <Button to="/listings">Explore Listings →</Button>
           <Button variant="outline" to="/contact">
