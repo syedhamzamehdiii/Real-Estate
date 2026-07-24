@@ -88,8 +88,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
+  color: inherit;
   transition: 0.3s;
+}
+
+.social a svg {
+  display: block;
 }
 
 .social a:hover {

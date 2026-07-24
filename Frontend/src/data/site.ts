@@ -1,12 +1,15 @@
 export const SITE = {
   name: 'Estate Line Properties',
   tagline: 'Homes Found at Dusk',
-  phone: '+923001234567',
-  phoneDisplay: '+92 300 1234567',
-  whatsapp: '923001234567',
-  email: 'hello@estatelineproperties.com',
-  address: '63-MB, DHA Phase 6, Lahore',
+  phone: '+923004368166',
+  phoneDisplay: '0300 4368166',
+  whatsapp: '923004368166',
+  email: 'estatelineproperties@gmail.com',
+  address: 'Plaza No 170 CCA1, DHA Phase 6 Lahore, Pakistan',
   foundedYear: 2014,
+  facebook: 'https://www.facebook.com/share/1Jj6c3Nqk5/',
+  instagram: 'https://www.instagram.com/estatelineproperties',
+  youtube: 'https://www.youtube.com/@Estatelineproperties',
 } as const
 
 export const NAV_LINKS = [
